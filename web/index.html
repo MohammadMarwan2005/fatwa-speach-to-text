@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fatwa Transcript</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;600&display=swap">
+<style>
+:root{
+  --page:#f6f5f1;--surface:#ffffff;--subtle:#efede6;--text:#24231f;--text-2:#5f5d56;--muted:#8a877e;
+  --border:#dedbd2;--border-strong:#b9b5aa;--accent:#2f6fb3;--accent-bg:#e7f0fa;
+  --free:#2f7a4f;--free-bg:#e5f3ea;--paid:#8a5a0e;--paid-bg:#fbefd9;--bad:#a63a32;--bad-bg:#fbe9e7;
+  --fix:#fff1c2;--fix-line:#d49b16;--flag:#fbe3e0;--flag-line:#c2554b;
+  --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;
+  --ar:"Noto Naskh Arabic","Amiri","Scheherazade New","Geeza Pro","Arial",serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#1b1b19;--surface:#252522;--subtle:#2e2e2a;--text:#ecebe6;--text-2:#b5b3ab;--muted:#8d8b84;
+  --border:#3b3a36;--border-strong:#55534d;--accent:#7fb2ea;--accent-bg:#1f3349;
+  --free:#7fcf9f;--free-bg:#1c3a29;--paid:#f0c072;--paid-bg:#463313;--bad:#f0938a;--bad-bg:#4a221e;
+  --fix:#4a3c12;--fix-line:#e0b043;--flag:#4a2420;--flag-line:#e07a70;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#1b1b19;--surface:#252522;--subtle:#2e2e2a;--text:#ecebe6;--text-2:#b5b3ab;--muted:#8d8b84;
+  --border:#3b3a36;--border-strong:#55534d;--accent:#7fb2ea;--accent-bg:#1f3349;
+  --free:#7fcf9f;--free-bg:#1c3a29;--paid:#f0c072;--paid-bg:#463313;--bad:#f0938a;--bad-bg:#4a221e;
+  --fix:#4a3c12;--fix-line:#e0b043;--flag:#4a2420;--flag-line:#e07a70;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text);font:15px/1.55 var(--ui)}
+main{max-width:1080px;margin:0 auto;padding:24px 16px 64px;display:flex;flex-direction:column;gap:20px}
+h1{font-size:22px;font-weight:600;margin:0}
+h2{font-size:17px;font-weight:600;margin:0 0 12px}
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-size:12.5px;padding:3px 10px;border-radius:999px;background:var(--subtle);color:var(--text-2)}
+.chip.ok{background:var(--free-bg);color:var(--free)}.chip.warn{background:var(--paid-bg);color:var(--paid)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px}
+.drop{border:1.5px dashed var(--border-strong);border-radius:12px;padding:26px 16px;text-align:center;cursor:pointer;color:var(--text-2)}
+.drop.over{border-color:var(--accent);background:var(--accent-bg)}
+.drop b{color:var(--text);font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;margin-top:14px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--text-2)}
+select,button{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border-strong);border-radius:9px;padding:7px 10px;min-height:38px}
+button{cursor:pointer}button:hover{background:var(--subtle)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.primary:hover{filter:brightness(1.07);background:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+.hint{font-size:13px;color:var(--muted);margin-top:8px}
+.banner{border-radius:10px;padding:10px 14px;font-size:14px}
+.banner.warn{background:var(--paid-bg);color:var(--paid)}.banner.bad{background:var(--bad-bg);color:var(--bad)}
+.toggle{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);cursor:pointer}
+.toggle input{width:17px;height:17px;accent-color:var(--accent)}
+/* pipeline */
+.pipe{display:grid;grid-template-columns:minmax(0,250px) 34px minmax(0,1fr);align-items:center;row-gap:0}
+.stp{border:1px solid var(--border);border-radius:12px;padding:9px 12px;background:var(--surface);position:relative}
+.stp .n{font-size:11.5px;color:var(--muted)}.stp .h{font-weight:600}
+.stp .d{font-size:12.5px;color:var(--text-2);word-break:break-word}
+.stp.running{border-color:var(--accent)}.stp.done{border-color:var(--free)}.stp.error{border-color:var(--bad)}.stp.skipped{border-style:dashed}
+.bar{height:4px;border-radius:4px;background:var(--subtle);margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent);width:0}
+.st{float:right;font-size:11.5px;padding:0 7px;border-radius:6px;background:var(--subtle);color:var(--text-2)}
+.st.done{background:var(--free-bg);color:var(--free)}.st.running{background:var(--accent-bg);color:var(--accent)}
+.st.error{background:var(--bad-bg);color:var(--bad)}
+.down{text-align:center;color:var(--muted);line-height:20px;font-size:14px}
+.ln{height:0;border-top:1.5px dashed var(--border-strong);position:relative;margin-right:7px}
+.ln::after{content:"";position:absolute;right:-7px;top:-5.5px;border-left:7px solid var(--border-strong);border-top:4.5px solid transparent;border-bottom:4.5px solid transparent}
+.tag{border:1px solid var(--border);border-radius:10px;padding:7px 10px;font-size:12.5px;line-height:1.5;color:var(--text-2);background:var(--surface)}
+.tag b{color:var(--text);font-weight:600}
+.pill{display:inline-block;font-size:11px;line-height:17px;padding:0 7px;border-radius:5px;margin-right:4px;font-weight:600}
+.pill.free{background:var(--free-bg);color:var(--free)}.pill.paid{background:var(--paid-bg);color:var(--paid)}
+.hide-cards .ln,.hide-cards .tag,.hide-cards .cards,.hide-cards .cline{visibility:hidden}
+/* result */
+.summary{font-size:15px;color:var(--text-2);margin:0 0 12px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+audio{width:100%;margin:6px 0 14px}
+.tr{display:grid;grid-template-columns:minmax(0,1fr) 30px minmax(0,1.25fr);grid-auto-flow:row dense;gap:0;align-items:start}
+.tr .say{grid-column:3}.tr .cline{grid-column:2}.tr .cards{grid-column:1}
+.cards{display:flex;flex-direction:column;gap:6px;padding:6px 0}
+.cline{height:0;border-top:1.5px dashed var(--fix-line);margin-top:24px;position:relative;margin-left:6px}
+.cline::after{content:"";position:absolute;left:-7px;top:-5.5px;border-right:7px solid var(--fix-line);border-top:4.5px solid transparent;border-bottom:4.5px solid transparent}
+.cline.flag{border-color:var(--flag-line)}.cline.flag::after{border-right-color:var(--flag-line)}
+.cline.none{border:0}.cline.none::after{display:none}
+.say{direction:rtl;text-align:right;font:21px/1.95 var(--ar);padding:6px 12px;border-radius:10px;cursor:pointer;unicode-bidi:plaintext}
+.say:hover{background:var(--subtle)}.say.playing{background:var(--accent-bg)}
+.say .t{font:12px var(--ui);color:var(--muted);direction:ltr;unicode-bidi:isolate;margin-left:8px;vertical-align:middle}
+.sec{grid-column:1/-1;direction:rtl;text-align:right;font:600 17px/1.6 var(--ar);color:var(--accent);margin:14px 12px 0}
+mark{background:var(--fix);color:inherit;border-bottom:2px solid var(--fix-line);border-radius:3px;padding:0 1px}
+mark.flag{background:var(--flag);border-bottom-color:var(--flag-line)}
+mark sup,.cn{font:600 10.5px var(--ui);color:var(--fix-line)}
+mark.flag sup,.cn.flag{color:var(--flag-line)}
+.cc{border:1px solid var(--fix-line);border-radius:10px;padding:6px 10px;font-size:12.5px;line-height:1.5;background:var(--surface);color:var(--text-2)}
+.cc.flag{border-color:var(--flag-line)}.cc.note{border-color:var(--border-strong)}
+.cc .k{font-weight:600;color:var(--text)}
+.ar{font:16px var(--ar);direction:rtl;unicode-bidi:isolate;color:var(--text)}
+details{margin-top:12px}summary{cursor:pointer;color:var(--text-2);font-size:14px}
+.runs{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:10px}
+.runs .r{border:1px solid var(--border);border-radius:10px;padding:10px}
+.runs .r p{direction:rtl;text-align:right;font:16px/1.8 var(--ar);margin:6px 0 0}
+pre{white-space:pre-wrap;font:12px/1.5 var(--mono);color:var(--text-2);max-height:260px;overflow:auto;background:var(--subtle);padding:10px;border-radius:8px}
+.hist{display:flex;flex-direction:column;gap:6px}
+.hist button{text-align:left;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.hist .m{color:var(--muted);font-size:13px}
+.empty{color:var(--muted);font-size:14px}
+@media (max-width:700px){
+  .pipe{grid-template-columns:1fr}.pipe .ln{display:none}.pipe .tag{margin:6px 0 2px}
+  .tr{grid-template-columns:1fr}.tr .say,.tr .cline,.tr .cards{grid-column:auto}.tr .cline{display:none}
+  .tr .cards{padding:0 0 10px 18px}
+  .hide-cards .tag,.hide-cards .cards{display:none}
+}
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <h1>Fatwa transcript</h1>
+    <div class="chips" id="chips"><span class="chip">Connecting…</span></div>
+  </div>
+
+  <section class="card" aria-labelledby="new-h">
+    <h2 id="new-h">New transcript</h2>
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose an audio file">
+      <b>Drop a voice note here</b> or click to choose a file<br>
+      <span class="hint">Telegram .ogg / .m4a, .mp3, .wav, or a video file</span>
+      <div id="picked" style="margin-top:8px;color:var(--text)"></div>
+    </div>
+    <input type="file" id="file" accept="audio/*,video/*,.ogg,.oga,.opus,.m4a" hidden>
+    <div class="row">
+      <label class="f">Correction model
+        <select id="model"></select></label>
+      <label class="f">Whisper runs
+        <select id="runs">
+          <option value="2">2 runs (recommended)</option>
+          <option value="1">1 run (faster, fewer checks)</option>
+          <option value="3">3 runs (slower)</option>
+        </select></label>
+      <label class="f">Effort
+        <select id="effort">
+          <option value="medium">Medium (recommended)</option>
+          <option value="low">Low (cheaper)</option>
+          <option value="high">High (more careful)</option>
+        </select></label>
+      <button class="primary" id="go" disabled>Transcribe</button>
+    </div>
+    <div class="hint" id="estimate"></div>
+  </section>
+
+  <section class="card" id="jobcard" hidden aria-labelledby="job-h">
+    <div class="top" style="margin-bottom:12px">
+      <h2 id="job-h" style="margin:0">Pipeline</h2>
+      <label class="toggle"><input type="checkbox" id="showcards" checked> Show cards</label>
+    </div>
+    <div id="banner"></div>
+    <div class="pipe" id="pipe"></div>
+    <div class="row" id="redo" hidden>
+      <label class="f">Run the correction again with
+        <select id="redoModel"></select></label>
+      <button id="redoBtn">Run correction again</button>
+      <span class="hint" style="margin:0 0 8px">Reuses Whisper's runs, so it takes about a minute and only step 5 costs money.</span>
+    </div>
+  </section>
+
+  <section class="card" id="resultcard" hidden aria-labelledby="res-h">
+    <h2 id="res-h">Transcript</h2>
+    <p class="summary" id="summary"></p>
+    <div class="actions" id="actions"></div>
+    <audio id="player" controls preload="metadata"></audio>
+    <div class="tr" id="tr"></div>
+    <details id="rawruns"><summary>Whisper's raw runs</summary><div class="runs" id="runs-raw"></div></details>
+  </section>
+
+  <section class="card" aria-labelledby="hist-h">
+    <h2 id="hist-h">Past transcripts</h2>
+    <div class="hist" id="hist"><span class="empty">None yet.</span></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clock = (t) => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+  return h ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${m}:${String(s).padStart(2,"0")}`; };
+const store = { get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+                set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+
+// What each step is, where it runs, and what it costs. Shown as cards beside the steps.
+const STEP_CARDS = {
+  upload:  {pills: ["free"], html: "<b>What:</b> your file is copied into <code>jobs/&lt;id&gt;/</code> on this computer. Nothing is uploaded to the internet."},
+  convert: {pills: ["free"], html: "<b>Tool:</b> ffmpeg. <b>Why:</b> Whisper reads 16 kHz mono audio. No noise cleanup unless you choose 3 runs."},
+  whisper: {pills: ["free"], html: "<b>Tool:</b> Whisper large-v3 (whisper.cpp) on your CPU, about 2–3× the audio length per run. <b>Why several runs:</b> where they disagree is where Whisper is likely wrong."},
+  compare: {pills: ["free"], html: "<b>What:</b> lines the runs up by time and flags words under 0.75 confidence. <b>Output:</b> the list Claude (or you) checks."},
+  correct: {pills: ["paid", "free"], html: "<b>Paid:</b> Claude reads the runs and the flags and writes the corrected text. Billed to the key in <code>config.env</code>. <b>Free:</b> skipped; you check the flagged words."},
+  save:    {pills: ["free"], html: "<b>Output:</b> <code>transcript.txt</code>, <code>transcript.srt</code> subtitles and <code>result.json</code> in the job folder."},
+};
+const KIND = {spelling: "Spelling", word_boundary: "Word split", runs_disagreed: "Runs disagreed", fixed_phrase: "Fixed phrase",
+  low_confidence_outlier: "Unsure outlier", quran: "Quran", hadith: "Hadith", orthography: "Spelling style", other: "Other"};
+
+let status = null, chosen = null, currentJob = null, pollTimer = null, renderedResultFor = null;
+
+// ---------- status + options ----------
+async function loadStatus() {
+  try { status = await (await fetch("/api/status")).json(); } catch { $("chips").innerHTML = '<span class="chip warn">Server not reachable</span>'; return; }
+  const chips = [];
+  chips.push(status.api_key_set ? '<span class="chip ok">API key set</span>'
+    : '<span class="chip warn" title="' + esc(status.config_file) + '">No API key: free mode only</span>');
+  chips.push(status.whisper.ready ? '<span class="chip ok">Whisper model ready</span>'
+    : '<span class="chip warn">Whisper model downloads on first run (1.1 GB)</span>');
+  if (status.busy) chips.push('<span class="chip">Working on a job</span>');
+  $("chips").innerHTML = chips.join("");
+  const sel = $("model");
+  if (!sel.options.length) {
+    const saved = store.get("model", status.default_model);
+    for (const m of status.models) sel.add(new Option(`${m.label}${m.id === "claude-opus-5-5" ? " (recommended)" : ""}`, m.id));
+    sel.add(new Option("No AI, free (you check flagged words)", "none"));
+    sel.value = [...sel.options].some(o => o.value === saved) ? saved : status.default_model;
+    $("runs").value = store.get("runs", "2");
+    $("effort").value = store.get("effort", status.default_effort);
+  }
+  if (!status.api_key_set && sel.value !== "none") $("estimate").innerHTML =
+    `No API key yet, so the correction step will be skipped. Add <code>ANTHROPIC_API_KEY=…</code> to <code>${esc(status.config_file)}</code>; no restart needed.`;
+  else updateEstimate();
+}
+
+function updateEstimate() {
+  if (!status) return;
+  const m = status.models.find(x => x.id === $("model").value);
+  const runs = +$("runs").value;
+  let txt = `Whisper: about ${runs * 2}–${runs * 3}× the audio length on this computer.`;
+  if (m) txt += ` Correction with ${m.label}: roughly $${(0.09 * m.in + 0.03 * m.out).toFixed(2)} per audio hour (estimate; the exact cost is shown after the run).`;
+  else txt += " No AI cost.";
+  $("estimate").textContent = txt;
+}
+for (const id of ["model", "runs", "effort"]) $(id).addEventListener("change", () => { store.set(id, $(id).value); loadStatus(); });
+
+// ---------- file picking ----------
+const drop = $("drop");
+drop.addEventListener("click", () => $("file").click());
+drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]); });
+$("file").addEventListener("change", (e) => { if (e.target.files[0]) pick(e.target.files[0]); });
+function pick(f) { chosen = f; $("picked").textContent = `${f.name} · ${(f.size / 1e6).toFixed(1)} MB`; $("go").disabled = false; }
+
+$("go").addEventListener("click", async () => {
+  if (!chosen) return;
+  $("go").disabled = true; $("go").textContent = "Uploading…";
+  const q = new URLSearchParams({filename: chosen.name, model: $("model").value, runs: $("runs").value, effort: $("effort").value});
+  try {
+    const r = await fetch("/api/jobs?" + q, {method: "POST", body: chosen, headers: {"X-Transcriber": "1", "Content-Type": "application/octet-stream"}});
+    const st = await r.json();
+    if (!r.ok) throw new Error(st.error || r.statusText);
+    openJob(st.id);
+    loadHistory();
+  } catch (err) { alert("Couldn't start: " + err.message); }
+  $("go").textContent = "Transcribe"; $("go").disabled = false;
+});
+
+// ---------- job view ----------
+function openJob(id) {
+  currentJob = id; renderedResultFor = null;
+  $("jobcard").hidden = false; $("resultcard").hidden = true;
+  clearTimeout(pollTimer); poll();
+  history.replaceState(null, "", "#" + id);
+}
+
+async function poll() {
+  if (!currentJob) return;
+  let st;
+  try { st = await (await fetch(`/api/jobs/${currentJob}`)).json(); } catch { pollTimer = setTimeout(poll, 2000); return; }
+  renderPipeline(st);
+  if (st.status === "done" && renderedResultFor !== st.id) { renderedResultFor = st.id; renderResult(st); loadHistory(); loadStatus(); }
+  if (st.status === "error") { loadHistory(); loadStatus(); }
+  if (st.status === "queued" || st.status === "running") pollTimer = setTimeout(poll, 1000);
+}
+
+function renderPipeline(st) {
+  const b = [];
+  if (st.status === "error") b.push(`<div class="banner bad">This transcript failed: ${esc(st.error)}</div>`);
+  if (st.warning) b.push(`<div class="banner warn">${esc(st.warning)}</div>`);
+  if (st.status === "queued") b.push('<div class="banner warn">Waiting for the job before it to finish.</div>');
+  $("banner").innerHTML = b.join("") + (b.length ? '<div style="height:12px"></div>' : "");
+  const opt = st.options;
+  const cost = opt.model === "none" ? "free mode" : (status?.models.find(m => m.id === opt.model)?.label || opt.model);
+  const parts = st.steps.map((s, i) => {
+    const took = s.started && s.ended ? ` · ${(s.ended - s.started).toFixed(1)} s` : "";
+    const label = {pending: "Waiting", running: "Running", done: "Done", skipped: "Skipped", error: "Problem"}[s.status];
+    const card = STEP_CARDS[s.key];
+    const pills = card.pills.map(p => `<span class="pill ${p}">${p === "free" ? "Free" : "Paid"}</span>`).join("");
+    const extra = s.key === "correct" ? ` <b>This job:</b> ${esc(cost)}, effort ${esc(opt.effort)}.` :
+                  s.key === "whisper" ? ` <b>This job:</b> ${opt.runs} run${opt.runs > 1 ? "s" : ""}.` : "";
+    return `<div class="stp ${s.status}"><span class="st ${s.status}">${label}</span><div class="n">Step ${i + 1}${took}</div>
+      <div class="h">${esc(s.title)}</div><div class="d">${esc(s.detail)}</div>
+      ${s.status === "running" ? `<div class="bar"><i style="width:${Math.round((s.fraction || 0) * 100)}%"></i></div>` : ""}</div>
+      <div class="ln"></div><div class="tag">${pills}${card.html}${extra}</div>
+      ${i < st.steps.length - 1 ? '<div class="down" aria-hidden="true">↓</div><div></div><div></div>' : ""}`;
+  });
+  $("pipe").innerHTML = parts.join("");
+  // Offer a re-run of the correction once Whisper's runs exist and nothing is running.
+  const whisperDone = st.steps.find(s => s.key === "whisper")?.status === "done";
+  const idle = st.status === "done" || st.status === "error";
+  $("redo").hidden = !(whisperDone && idle && status?.api_key_set);
+  if (!$("redo").hidden && !$("redoModel").options.length)
+    for (const m of status.models) $("redoModel").add(new Option(m.label, m.id));
+  if (!$("redo").hidden) $("redoModel").value = opt.model !== "none" ? opt.model : $("model").value === "none" ? status.default_model : $("model").value;
+  applyCards();
+}
+
+$("redoBtn").addEventListener("click", async () => {
+  if (!currentJob) return;
+  $("redoBtn").disabled = true;
+  const q = new URLSearchParams({model: $("redoModel").value, effort: $("effort").value});
+  try {
+    const r = await fetch(`/api/jobs/${currentJob}/redo?` + q, {method: "POST", headers: {"X-Transcriber": "1"}});
+    const st = await r.json();
+    if (!r.ok) throw new Error(st.error || r.statusText);
+    openJob(currentJob);
+  } catch (err) { alert("Couldn't start: " + err.message); }
+  $("redoBtn").disabled = false;
+});
+
+async function renderResult(st) {
+  const data = await (await fetch(`/api/jobs/${st.id}/files/result.json`)).json();
+  const res = data.result, cmp = data.compared;
+  const ev = Object.fromEntries(cmp.lines.map(l => [l.id, l]));
+  $("resultcard").hidden = false;
+  $("summary").textContent = res.mode === "corrected"
+    ? (res.summary || "") + ` Corrected by ${status?.models.find(m => m.id === res.model)?.label || res.model}: ${res.corrections.length} fix${res.corrections.length === 1 ? "" : "es"}, $${res.usage.cost_usd.toFixed(4)}.`
+    : "Whisper's text, not corrected. Words Whisper was unsure about are marked red; click a line to hear it.";
+  const base = `/api/jobs/${st.id}/files/`;
+  $("actions").innerHTML = `<button id="copy">Copy text</button>
+    <a href="${base}transcript.txt?download=1"><button>Download .txt</button></a>
+    <a href="${base}transcript.srt?download=1"><button>Download .srt</button></a>
+    <a href="${base}result.json?download=1"><button>Download .json</button></a>`;
+  $("copy").onclick = async () => { const t = await (await fetch(base + "transcript.txt")).text();
+    try { await navigator.clipboard.writeText(t); $("copy").textContent = "Copied"; } catch { $("copy").textContent = "Copy failed"; }
+    setTimeout(() => $("copy").textContent = "Copy text", 1500); };
+  const player = $("player"); player.src = `/api/jobs/${st.id}/audio`;
+
+  const byLine = {}, notesBy = {};
+  res.corrections.forEach((c, i) => (byLine[c.line_id] ||= []).push({...c, n: i + 1}));
+  res.notes.forEach(n => (notesBy[n.line_id] ||= []).push(n));
+  const runLabel = (r) => data.runs[r]?.label ? `run ${r} (${data.runs[r].label.toLowerCase()})` : `run ${r}`;
+  let flagNo = 0;
+  const html = [];
+  for (const ln of res.lines) {
+    if (ln.section) html.push(`<div class="sec">${esc(ln.section)}</div>`);
+    let text = esc(ln.text);
+    const cards = [];
+    if (res.mode === "corrected") {
+      for (const c of byLine[ln.id] || []) {
+        const w = esc(c.wrote);
+        if (w && text.includes(w)) text = text.replace(w, `<mark>${w}<sup>${c.n}</sup></mark>`);
+        const sup = c.runs_supporting.length ? `in ${c.runs_supporting.map(r => "run " + esc(r)).join(", ")}` : "in no run, rebuilt from the sounds";
+        cards.push(`<div class="cc"><span class="cn">${c.n}</span> <span class="k">${esc(KIND[c.kind] || c.kind)}</span><br>
+          Heard <span class="ar">${esc(c.heard) || "—"}</span> → wrote <span class="ar">${esc(c.wrote) || "—"}</span><br>
+          <b>Where from:</b> ${sup}. <b>Why:</b> ${esc(c.reason)}</div>`);
+      }
+    } else {
+      for (const f of ln.flags || []) {
+        flagNo++;
+        const w = esc(f.w);
+        if (w && text.includes(w) && !text.includes(`>${w}<sup`)) text = text.replace(w, `<mark class="flag">${w}<sup>${flagNo}</sup></mark>`);
+        const others = heardAt(ev[ln.id], cmp.base_run, ln.text_run, f.w)
+          .map(([r, t]) => `${runLabel(r)}: ${t === null ? "the same word" : `<span class="ar">${esc(t) || "nothing"}</span>`}`).join("<br>");
+        cards.push(`<div class="cc flag"><span class="cn flag">${flagNo}</span> <span class="k">Whisper unsure, ${f.p.toFixed(2)}</span><br>
+          <span class="ar">${w}</span> in ${esc(runLabel(f.run))}.${others ? "<br><b>Other runs heard:</b><br>" + others : ""}</div>`);
+      }
+    }
+    for (const n of notesBy[ln.id] || []) cards.push(`<div class="cc note"><span class="k">Note</span><br>${esc(n.note)}</div>`);
+    const kind = cards.length ? (res.mode === "corrected" ? "" : " flag") : " none";
+    html.push(`<div class="say" data-s="${ln.start}" data-e="${ln.end}" title="Play this line">${text}<span class="t">${clock(ln.start)}</span></div>
+      <div class="cline${kind}"></div><div class="cards">${cards.join("")}</div>`);
+  }
+  $("tr").innerHTML = html.join("");
+  document.querySelectorAll(".say").forEach(el => el.addEventListener("click", () => {
+    player.currentTime = +el.dataset.s; player.play(); stopAt = +el.dataset.e;
+    document.querySelectorAll(".say.playing").forEach(x => x.classList.remove("playing")); el.classList.add("playing");
+  }));
+  $("runs-raw").innerHTML = Object.entries(data.runs).map(([r, v]) =>
+    `<div class="r"><b>Run ${esc(r)}</b> · ${esc(v.label)} · ${clock(v.seconds)}<p>${esc(v.segments.map(s => s.text).join(" "))}</p></div>`).join("");
+}
+// Compare words the way pipeline/compare.py does: no vowel marks, punctuation or alef variants.
+const norm = (w) => String(w || "").replace(/[ؐ-ًؚ-ٰٟۖ-ۭـ]/g, "")
+  .replace(/[،؛؟۔.,!?:;"'«»()\[\]﴾﴿…\-–—]/g, "").replace(/[أإآٱ]/g, "ا");
+// What the other runs heard where this run has `word`: null = the same word, a string = their words there.
+function heardAt(line, baseRun, textRun, word) {
+  if (!line) return [];
+  const texts = {...line.alts, [baseRun]: line.base};
+  const w = norm(word);
+  return Object.keys(texts).filter(r => r !== textRun).sort().map(r => {
+    if (texts[r].split(/\s+/).some(x => norm(x) === w)) return [r, null];
+    if (r === baseRun) {  // the line's diffs say what the base run has where `textRun` differs
+      const d = line.diffs.find(d => d.run === textRun && d.alt.split(/\s+/).some(x => norm(x) === w));
+      if (d) return [r, d.base];
+    }
+    return [r, texts[r]];
+  });
+}
+let stopAt = null;
+$("player").addEventListener("timeupdate", () => { if (stopAt !== null && $("player").currentTime >= stopAt) { $("player").pause(); stopAt = null; } });
+$("player").addEventListener("pause", () => document.querySelectorAll(".say.playing").forEach(x => x.classList.remove("playing")));
+
+// ---------- cards toggle ----------
+function applyCards() { const on = $("showcards").checked; document.querySelectorAll("#pipe, #tr").forEach(el => el.classList.toggle("hide-cards", !on)); }
+$("showcards").checked = store.get("showcards", "1") === "1";
+$("showcards").addEventListener("change", () => { store.set("showcards", $("showcards").checked ? "1" : "0"); applyCards(); });
+new MutationObserver(applyCards).observe($("tr"), {childList: true});
+applyCards();
+
+// ---------- history ----------
+async function loadHistory() {
+  let jobs = [];
+  try { jobs = await (await fetch("/api/jobs")).json(); } catch { return; }
+  if (!jobs.length) { $("hist").innerHTML = '<span class="empty">None yet.</span>'; return; }
+  $("hist").innerHTML = jobs.map(j => {
+    const when = new Date(j.created * 1000).toLocaleString();
+    const how = j.options.model === "none" ? "free" : (status?.models.find(m => m.id === j.options.model)?.label || j.options.model);
+    const state = {done: "", error: " · failed", running: " · running", queued: " · waiting"}[j.status] || "";
+    return `<button data-id="${esc(j.id)}"><span>${esc(j.filename)}${state}</span><span class="m">${clock(j.duration)} · ${esc(how)} · ${esc(when)}</span></button>`;
+  }).join("");
+  $("hist").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { openJob(b.dataset.id); window.scrollTo({top: 0, behavior: "smooth"}); }));
+}
+
+loadStatus(); loadHistory();
+setInterval(loadStatus, 15000);
+if (location.hash.length > 1) openJob(location.hash.slice(1));
+</script>
+</body>
+</html>
