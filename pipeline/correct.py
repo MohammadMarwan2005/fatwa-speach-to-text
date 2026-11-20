@@ -42,7 +42,8 @@ Rules:
 12. If no reading is reasonably supported, write your best guess and add a note that starts with "Unclear:".
 13. List in `corrections` every place where your words differ from the base run's words. Changes of punctuation or vowel marks alone don't need an entry. `heard` is the base run's words there, `wrote` is your words exactly as they appear in your line text, `runs_supporting` lists the runs that had your reading (empty if no run had it), and `reason` is one short English sentence.
 14. Return every line id you were asked for exactly once, in order. Keep each line to what was said in its time span; move a word to a neighbouring line only when the runs show it belongs there.
-15. `summary`: one short English sentence on what this part of the recording is about."""
+15. `summary`: one short English sentence on what this part of the recording is about.
+16. `known_fixes_from_this_user`, if present, lists corrections this person made by hand in earlier transcripts ("heard" → "wrote", how many transcripts, and the word before it when it was one word). They show how this person's recordings tend to be misheard. Apply one where the sounds and the context fit; never force it where the word is right as heard (for example عليكم in السلام عليكم)."""
 
 SCHEMA = {
     "type": "object",
@@ -107,6 +108,15 @@ def _payload(chunk: list, run_labels: dict, base: str, context: list) -> str:
     data = {"runs": run_labels, "base_run": base, "lines": lines}
     if context:
         data["already_corrected_previous_lines"] = context
+    try:
+        from . import learning
+        known = [{"heard": f["heard"], "wrote": f["wrote"], "transcripts": f["count"],
+                  **({"after_word": f["contexts"][:5]} if " " not in f["heard"] and f["contexts"] else {})}
+                 for f in learning.fixes() if f["confidence"] >= 0.5][:60]
+        if known:
+            data["known_fixes_from_this_user"] = known
+    except Exception:  # learning is a help, never a reason for the correction to fail
+        pass
     ids = f"{chunk[0]['id']}-{chunk[-1]['id']}" if len(chunk) > 1 else str(chunk[0]["id"])
     return (f"Correct lines {ids}. Return each of these ids exactly once.\n\n"
             + json.dumps(data, ensure_ascii=False, indent=1))

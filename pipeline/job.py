@@ -172,14 +172,20 @@ def _audio_and_whisper(job: Job) -> dict:
             "whisper", f * 0.05, f"Downloading the Whisper model ({wname}), {f * 100:.0f}%"))
     engine = engines.get_engine()
     chosen = whisper_runs.RUNS[:opts["runs"]]
+    # Words people corrected before go into the prompted runs, so Whisper hears them right more often.
+    # Run B keeps no prompt, so the comparison between runs stays independent.
+    from . import learning
+    terms = learning.prompt_terms()
+    st["prompt_terms"] = terms
     runs = {}
     (d / "runs").mkdir(exist_ok=True)
     for k, r in enumerate(chosen):
         label = f"Run {r['id']} of {len(chosen)}: {r['label'].lower()}"
         job.progress("whisper", 0.05 + 0.95 * k / len(chosen), label)
         t0 = time.time()
+        prompt = r["prompt"] + (" " + "، ".join(terms) + "." if r["prompt"] and terms else "")
         res = engine.transcribe(
-            mpath, d / f"{r['audio']}.wav", r["prompt"], st["duration"],
+            mpath, d / f"{r['audio']}.wav", prompt, st["duration"],
             lambda f, k=k, label=label: job.progress(
                 "whisper", 0.05 + 0.95 * (k + f) / len(chosen), f"{label}, {f * 100:.0f}%"))
         res.update(id=r["id"], label=r["label"], seconds=round(time.time() - t0, 1), device=engine.device)
@@ -188,8 +194,9 @@ def _audio_and_whisper(job: Job) -> dict:
     secs = sum(r["seconds"] for r in runs.values())
     speed = f", {secs / st['duration']:.1f}× audio length" if st.get("duration") else ""
     st["device"] = engine.device
+    learned = f", prompt included {len(terms)} learned word{'s' if len(terms) != 1 else ''}" if terms else ""
     job.finish("whisper", f"{len(runs)} run{'s' if len(runs) > 1 else ''} of Whisper {wname} on {engine.device}, "
-                          f"{outputs.clock(secs)}{speed}")
+                          f"{outputs.clock(secs)}{speed}{learned}")
     return runs
 
 
