@@ -3,3 +3,7 @@ jobs/
 config.env
 __pycache__/
 *.pyc
+build/
+dist/
+dist-installer/
+dmg/

@@ -1,0 +1,165 @@
+# Builds the installed app for Windows, Linux and macOS, tests it on each, and makes the installers.
+#   push to main          -> installers as build artifacts (Actions tab, sign-in needed to download)
+#   push a tag like v0.3.0 -> the same, plus a public GitHub Release with the installers
+name: Build installers
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  WHISPER_CPP_REF: v1.9.5     # official whisper.cpp source this app is built from
+  VULKAN_VERSION: 1.4.357.0   # Windows Vulkan SDK (same as llama.cpp's release builds)
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: windows-x64, os: windows-2022, experimental: false }
+          - { name: linux-x64, os: ubuntu-22.04, experimental: false }
+          - { name: macos-arm64, os: macos-14, experimental: false }
+          - { name: macos-x64, os: macos-15-intel, experimental: true }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.3.0"; fi
+          echo "APP_VERSION=$v" >> "$GITHUB_ENV"
+
+      - name: Get whisper.cpp ${{ env.WHISPER_CPP_REF }}
+        run: git clone --depth 1 --branch "$WHISPER_CPP_REF" https://github.com/ggml-org/whisper.cpp ../whisper.cpp
+
+      - name: Vulkan SDK (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list https://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential vulkan-sdk
+
+      - name: Vulkan SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          curl.exe -o $env:RUNNER_TEMP/VulkanSDK-Installer.exe -L "https://sdk.lunarg.com/sdk/download/${env:VULKAN_VERSION}/windows/vulkansdk-windows-X64-${env:VULKAN_VERSION}.exe"
+          & "$env:RUNNER_TEMP\VulkanSDK-Installer.exe" --accept-licenses --default-answer --confirm-command install
+          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\${env:VULKAN_VERSION}"
+          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\${env:VULKAN_VERSION}\bin"
+
+      # One build per OS that picks the fastest hardware at run time:
+      #   Windows/Linux: every CPU variant (SSE4.2 ... AVX-512, loaded by what the CPU supports) + Vulkan GPU
+      #   macOS arm64:   Metal GPU + Apple's Accelerate      macOS x64: CPU variants + Metal
+      - name: Build whisper.cpp
+        working-directory: ../whisper.cpp
+        run: |
+          COMMON="-DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_SDL2=OFF"
+          case "${{ matrix.name }}" in
+            linux-x64)   cmake -B build $COMMON -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_VULKAN=ON \
+                           -DCMAKE_INSTALL_RPATH='$ORIGIN' -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON ;;
+            windows-x64) cmake -B build $COMMON -DBUILD_SHARED_LIBS=ON -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON \
+                           -DGGML_VULKAN=ON ;;
+            macos-arm64) cmake -B build $COMMON -DBUILD_SHARED_LIBS=OFF -DGGML_METAL_EMBED_LIBRARY=ON ;;
+            macos-x64)   cmake -B build $COMMON -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DGGML_METAL_EMBED_LIBRARY=ON \
+                           -DCMAKE_INSTALL_RPATH='@loader_path' -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON ;;
+          esac
+          cmake --build build --config Release --parallel 4
+
+      - name: Collect whisper-cli and its libraries
+        run: |
+          mkdir -p build/whisper
+          W=../whisper.cpp/build
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            cp "$W/bin/Release/whisper-cli.exe" "$W"/bin/Release/*.dll build/whisper/
+          else
+            cp "$W/bin/whisper-cli" build/whisper/
+            find "$W" \( -name "*.so" -o -name "*.so.*" -o -name "*.dylib" \) -exec cp -L {} build/whisper/ \;
+          fi
+          cp ../whisper.cpp/LICENSE build/whisper/whisper.cpp-LICENSE.txt
+          ls -la build/whisper
+
+      - name: Tiny test model
+        run: |
+          mkdir -p build/models
+          curl -sSL -o build/models/ggml-tiny.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
+
+      - name: Python packages
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-app.txt "pyinstaller>=6.10,<7"
+
+      - name: Test whisper-cli with our JSON reader
+        run: python packaging/smoke_test.py build/whisper build/models/ggml-tiny.bin ../whisper.cpp/samples/jfk.wav
+
+      - name: Package the app
+        run: pyinstaller --noconfirm --distpath dist --workpath build/pyinstaller packaging/fatwa-transcript.spec
+
+      - name: Test the packaged app (a whole job)
+        run: |
+          case "$RUNNER_OS" in
+            Windows) APP="dist/FatwaTranscript/FatwaTranscript.exe" ;;
+            macOS)   APP="dist/Fatwa Transcript.app/Contents/MacOS/FatwaTranscript" ;;
+            *)       APP="dist/FatwaTranscript/FatwaTranscript" ;;
+          esac
+          python packaging/smoke_test.py build/whisper build/models/ggml-tiny.bin ../whisper.cpp/samples/jfk.wav "$APP"
+
+      - name: Installer (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install innosetup -y --no-progress
+          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DAppVersion=$APP_VERSION" packaging/windows.iss
+
+      - name: Installer (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist-installer
+          cp packaging/linux-install.sh dist/FatwaTranscript/install.sh
+          chmod +x dist/FatwaTranscript/install.sh dist/FatwaTranscript/FatwaTranscript
+          tar -czf dist-installer/FatwaTranscript-linux-x64.tar.gz -C dist FatwaTranscript
+
+      - name: Installer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dist-installer dmg
+          cp -R "dist/Fatwa Transcript.app" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Fatwa Transcript" -srcfolder dmg -ov -format UDZO "dist-installer/FatwaTranscript-${{ matrix.name }}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FatwaTranscript-${{ matrix.name }}
+          path: dist-installer/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: installers/*
+          generate_release_notes: true
