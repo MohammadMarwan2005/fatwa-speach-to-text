@@ -1,8 +1,8 @@
 ; Inno Setup recipe for the Windows installer. Installs for the current user only (no admin rights needed).
-; Build: iscc /DAppVersion=0.3.0 packaging\windows.iss   (after PyInstaller has filled dist\FatwaTranscript)
+; Build: iscc /DAppVersion=0.4.0 packaging\windows.iss   (after PyInstaller has filled dist\FatwaTranscript)
 
 #ifndef AppVersion
-  #define AppVersion "0.3.0"
+  #define AppVersion "0.4.0"
 #endif
 
 [Setup]

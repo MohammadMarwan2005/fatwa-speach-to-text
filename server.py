@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from pipeline import config, engines, learning, model_download, outputs, training
 from pipeline.job import create_job, queue_redo, saved_runs
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 MAX_UPLOAD = 2 * 1024 ** 3  # 2 GB
 JOB_ID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 DOWNLOADS = {

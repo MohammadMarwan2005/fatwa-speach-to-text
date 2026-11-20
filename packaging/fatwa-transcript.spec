@@ -11,6 +11,7 @@ whisper_dir = root / "build" / "whisper"
 datas = [(str(root / "web"), "web"), (str(root / "config.example.env"), ".")]
 datas += collect_data_files("imageio_ffmpeg")  # the ffmpeg program for this OS
 datas += collect_data_files("anthropic")
+datas += collect_data_files("certifi")  # HTTPS certificates: the macOS app's Python has none of its own
 # whisper-cli and its GPU/CPU libraries are copied as-is (not analysed), so the system's Vulkan
 # loader and GPU drivers are used at run time instead of copies from the build machine.
 if whisper_dir.exists():
@@ -22,7 +23,7 @@ a = Analysis(
     datas=datas,
     hiddenimports=["server", "pipeline.job", "pipeline.engines", "pipeline.correct", "pipeline.compare",
                    "pipeline.outputs", "pipeline.audio", "pipeline.model_download", "pipeline.whisper_runs",
-                   "psutil", "anthropic"],
+                   "pipeline.learning", "pipeline.training", "psutil", "anthropic", "certifi"],
     excludes=["pywhispercpp", "_pywhispercpp", "numpy", "tkinter", "matplotlib", "PIL"],
 )
 pyz = PYZ(a.pure)
@@ -36,6 +37,6 @@ if sys.platform == "darwin":
         coll,
         name="Fatwa Transcript.app",
         bundle_identifier="io.github.mohammadmarwan2005.fatwatranscript",
-        info_plist={"CFBundleShortVersionString": "0.3.0", "LSMinimumSystemVersion": "12.0",
+        info_plist={"CFBundleShortVersionString": "0.4.0", "LSMinimumSystemVersion": "12.0",
                     "NSHighResolutionCapable": True},
     )

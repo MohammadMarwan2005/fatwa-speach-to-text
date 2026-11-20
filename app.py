@@ -21,15 +21,27 @@ def main() -> int:
 
 
 def self_test() -> int:
-    """Quick check used by the build machines: modules import, files are bundled, whisper-cli is found."""
+    """Check used by the build machines: modules import, files are bundled, whisper-cli is found, and
+    HTTPS downloads work (the model download failed on macOS once, for lack of a certificate list)."""
+    import urllib.request
     import server
-    from pipeline import config, engines
+    from pipeline import config, engines, model_download
     print(f"{config.APP_NAME} {server.APP_VERSION}")
-    print("web page:", (config.WEB_DIR / "index.html").is_file())
+    web = (config.WEB_DIR / "index.html").is_file()
+    print("web page:", web)
     print("whisper-cli:", engines.cli_path())
     print("engine:", engines.describe_available())
     print("data folder:", config.DATA)
-    return 0 if (config.WEB_DIR / "index.html").is_file() else 1
+    https = False
+    try:
+        req = urllib.request.Request(config.MODEL_URL.format(file="ggml-tiny.bin"),
+                                     headers={"Range": "bytes=0-1023", "User-Agent": "fatwa-transcript"})
+        with urllib.request.urlopen(req, timeout=60, context=model_download._ssl_context()) as r:
+            https = r.status in (200, 206) and len(r.read()) > 0
+    except Exception as e:
+        print("https error:", e)
+    print("https download:", https)
+    return 0 if web and https else 1
 
 
 if __name__ == "__main__":

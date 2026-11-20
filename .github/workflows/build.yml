@@ -41,7 +41,7 @@ jobs:
 
       - name: Version
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.3.0"; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="0.4.0"; fi
           echo "APP_VERSION=$v" >> "$GITHUB_ENV"
 
       - name: Get whisper.cpp ${{ env.WHISPER_CPP_REF }}
@@ -111,13 +111,17 @@ jobs:
       - name: Package the app
         run: pyinstaller --noconfirm --distpath dist --workpath build/pyinstaller packaging/fatwa-transcript.spec
 
-      - name: Test the packaged app (a whole job)
+      - name: Test the packaged app (self-test with HTTPS download, then a whole job)
         run: |
           case "$RUNNER_OS" in
             Windows) APP="dist/FatwaTranscript/FatwaTranscript.exe" ;;
             macOS)   APP="dist/Fatwa Transcript.app/Contents/MacOS/FatwaTranscript" ;;
             *)       APP="dist/FatwaTranscript/FatwaTranscript" ;;
           esac
+          # With no system certificate files, like a fresh Mac: the app must use its bundled certifi.
+          mkdir -p "$RUNNER_TEMP/nocerts" && : > "$RUNNER_TEMP/nocerts/empty.pem"
+          SSL_CERT_FILE="$RUNNER_TEMP/nocerts/empty.pem" SSL_CERT_DIR="$RUNNER_TEMP/nocerts" "$APP" --self-test \
+            || { echo "::error::The packaged app can't download over HTTPS"; exit 1; }
           python packaging/smoke_test.py build/whisper build/models/ggml-tiny.bin ../whisper.cpp/samples/jfk.wav "$APP"
 
       # PowerShell, not Git Bash: bash rewrites "/DAppVersion=..." into a file path.
