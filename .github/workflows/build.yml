@@ -33,9 +33,9 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -120,11 +120,18 @@ jobs:
           esac
           python packaging/smoke_test.py build/whisper build/models/ggml-tiny.bin ../whisper.cpp/samples/jfk.wav "$APP"
 
+      # PowerShell, not Git Bash: bash rewrites "/DAppVersion=..." into a file path.
       - name: Installer (Windows)
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
           choco install innosetup -y --no-progress
-          "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DAppVersion=$APP_VERSION" packaging/windows.iss
+          $iscc = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe", "$env:ProgramFiles\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $iscc) { throw "ISCC.exe (Inno Setup) not found" }
+          Write-Host "Using $($iscc.FullName)"
+          & $iscc.FullName "/DAppVersion=$env:APP_VERSION" packaging\windows.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-ChildItem dist-installer
 
       - name: Installer (Linux)
         if: runner.os == 'Linux'
@@ -142,7 +149,7 @@ jobs:
           ln -s /Applications dmg/Applications
           hdiutil create -volname "Fatwa Transcript" -srcfolder dmg -ov -format UDZO "dist-installer/FatwaTranscript-${{ matrix.name }}.dmg"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: FatwaTranscript-${{ matrix.name }}
           path: dist-installer/*
@@ -155,7 +162,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: installers
           merge-multiple: true
