@@ -83,12 +83,14 @@ def ensure_model(path: Path, progress: Optional[Callable[[float], None]] = None,
             time.sleep(min(2 * (attempt + 1), 15))  # network hiccup: wait a little, then resume
     got = part.stat().st_size if part.exists() else 0
     if got != size:
+        what = f"{info['file']}, {size / 1e6:.0f} MB"
         why = f" ({type(last_error).__name__}: {getattr(last_error, 'reason', last_error)})" if last_error else ""
         if last_error is not None and _is_certificate_error(last_error):
-            raise RuntimeError("The Whisper model download was blocked by a certificate check" + why +
-                               ". If you are on a work or school network, it may inspect secure connections.")
-        raise RuntimeError(f"The Whisper model download stopped at {got / 1e6:.0f} of {size / 1e6:.0f} MB{why}. "
-                           "Check the internet connection and try again; it continues where it stopped.")
+            raise RuntimeError(f"The Whisper model download ({what}) was blocked by a certificate check{why}. "
+                               "If you are on a work or school network, it may inspect secure connections.")
+        raise RuntimeError(f"The Whisper model download ({what}) stopped at {got / 1e6:.0f} MB{why}. "
+                           f"Check the internet connection and try again; it continues where it stopped. "
+                           f"Or download the file yourself into {path.parent}")
     if sha256(part) != info["sha256"]:
         part.unlink()
         raise RuntimeError("The downloaded Whisper model failed its checksum and was deleted. Try again.")
