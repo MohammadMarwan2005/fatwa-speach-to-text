@@ -30,6 +30,31 @@ The page shows where Whisper ran (for example `GPU (Vulkan): NVIDIA GeForce GTX 
 `%LOCALAPPDATA%\FatwaTranscript` (Windows), `~/Library/Application Support/FatwaTranscript` (macOS),
 `~/.local/share/fatwa-transcript` (Linux). Put your API key in that `config.env`.
 
+## Learning from your corrections
+
+Every time you save a corrected transcript, the app compares each line you changed with what Whisper wrote
+and learns the word fixes (for example معودات → معوِّذات, شري عليك → شُرِع لك). Changes of punctuation or
+vowel marks only are ignored, and so are lines you rewrote completely.
+
+- **Suggestions.** New transcripts mark words you corrected before, with a card saying how often you made
+  that fix. **Apply** one, or **Apply sure learned fixes** for all the safe ones. Nothing changes by itself.
+- **Context.** A single word is only "sure" when the word before it is the same as when you corrected it,
+  so «الله عليكم → الله إليكم» isn't pushed onto «السلام عليكم». Every time you save a transcript and keep a
+  word as Whisper heard it, that counts against the fix.
+- **Whisper hints.** Your most corrected words are added to the prompt of the prompted Whisper run, so
+  Whisper hears them right more often. The run without a prompt stays neutral, so the two runs still check
+  each other.
+- **Claude.** If you use an API key, your fixes are sent along with the correction request.
+- **Learned fixes panel.** Shows every fix with its count. **Remove** a wrong one. **Export** and
+  **Import** let several users share what each has learned.
+
+**Training data for later.** Mark lines ✓ checked when you listened and the text is right (lines you
+correct are checked automatically, and **Mark all checked** does a whole transcript). **Export training
+data** gives a zip of the checked lines: 16 kHz audio clips plus `metadata.csv`, in the "audiofolder"
+layout that Whisper fine-tuning scripts read. Fine-tuning becomes worthwhile at roughly 20–50 hours of
+checked audio; keep whole recordings aside as a test set to measure it, and only use recordings you have
+permission to use.
+
 ## Run from source (developers)
 
 ```bash
@@ -109,6 +134,8 @@ pipeline/
   compare.py          step 4
   correct.py          step 5, and the correction rules sent to Claude
   outputs.py          step 6, and hand edits
+  learning.py         learned fixes: suggestions, Whisper hints, export/import
+  training.py         checked lines -> training-data zip
   job.py              runs the steps and records them in jobs/<id>/state.json
   config.py           paths, models, prices, settings
   model_download.py   downloads and checks the Whisper models
