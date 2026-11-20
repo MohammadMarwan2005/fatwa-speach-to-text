@@ -120,7 +120,8 @@ pre{white-space:pre-wrap;font:12px/1.5 var(--mono);color:var(--text-2);max-heigh
 <main>
   <div class="top">
     <h1>Fatwa transcript</h1>
-    <div class="chips" id="chips"><span class="chip">Connecting…</span></div>
+    <div class="chips"><span class="chips" id="chips"><span class="chip">Connecting…</span></span>
+      <button id="quit" title="Stop the app (closes the local server)" style="min-height:28px;padding:2px 10px;font-size:13px">Quit app</button></div>
   </div>
 
   <section class="card" aria-labelledby="new-h">
@@ -140,6 +141,8 @@ pre{white-space:pre-wrap;font:12px/1.5 var(--mono);color:var(--text-2);max-heigh
           <option value="1">1 run (faster, fewer checks)</option>
           <option value="3">3 runs (slower)</option>
         </select></label>
+      <label class="f">Whisper model
+        <select id="whisper"></select></label>
       <label class="f">Effort
         <select id="effort">
           <option value="medium">Medium (recommended)</option>
@@ -198,7 +201,7 @@ const store = { get(k, d) { try { return localStorage.getItem(k) ?? d; } catch {
 const STEP_CARDS = {
   upload:  {pills: ["free"], html: "<b>What:</b> your file is copied into <code>jobs/&lt;id&gt;/</code> on this computer. Nothing is uploaded to the internet."},
   convert: {pills: ["free"], html: "<b>Tool:</b> ffmpeg. <b>Why:</b> Whisper reads 16 kHz mono audio. No noise cleanup unless you choose 3 runs."},
-  whisper: {pills: ["free"], html: "<b>Tool:</b> Whisper large-v3 (whisper.cpp) on your CPU, about 2–3× the audio length per run. <b>Why several runs:</b> where they disagree is where Whisper is likely wrong."},
+  whisper: {pills: ["free"], html: "<b>Tool:</b> Whisper (whisper.cpp) on this computer: the GPU when there is one (NVIDIA, AMD, Intel, Apple), otherwise the fastest CPU code. <b>Why several runs:</b> where they disagree is where Whisper is likely wrong."},
   compare: {pills: ["free"], html: "<b>What:</b> lines the runs up by time and flags words under 0.75 confidence. <b>Output:</b> the list Claude (or you) checks."},
   correct: {pills: ["paid", "free"], html: "<b>Paid:</b> Claude reads the runs and the flags and writes the corrected text. Billed to the key in <code>config.env</code>. <b>Free:</b> skipped; you check the flagged words."},
   save:    {pills: ["free"], html: "<b>Output:</b> <code>transcript.txt</code>, <code>transcript.srt</code> subtitles and <code>result.json</code> in the job folder."},
@@ -214,18 +217,27 @@ async function loadStatus() {
   const chips = [];
   chips.push(status.api_key_set ? '<span class="chip ok">API key set</span>'
     : '<span class="chip warn" title="' + esc(status.config_file) + '">No API key: free mode only</span>');
-  chips.push(status.whisper.ready ? '<span class="chip ok">Whisper model ready</span>'
-    : '<span class="chip warn">Whisper model downloads on first run (1.1 GB)</span>');
+  const w = status.whisper;
+  const dev = w.last_device ? `Whisper ran on ${w.last_device}` : `Whisper: ${w.engine}`;
+  chips.push(`<span class="chip${/^GPU/.test(w.last_device) ? " ok" : ""}" title="${esc(w.engine)}">${esc(dev)}</span>`);
   if (status.busy) chips.push('<span class="chip">Working on a job</span>');
   $("chips").innerHTML = chips.join("");
   const sel = $("model");
   if (!sel.options.length) {
-    const saved = store.get("model", status.default_model);
+    // Without a key, start in free mode; otherwise the last choice or the default model.
+    const saved = store.get("model", status.api_key_set ? status.default_model : "none");
     for (const m of status.models) sel.add(new Option(`${m.label}${m.id === "claude-opus-5-5" ? " (recommended)" : ""}`, m.id));
     sel.add(new Option("No AI, free (you check flagged words)", "none"));
     sel.value = [...sel.options].some(o => o.value === saved) ? saved : status.default_model;
     $("runs").value = store.get("runs", "2");
     $("effort").value = store.get("effort", status.default_effort);
+    for (const m of w.models) $("whisper").add(new Option(m.label, m.id));
+    const sw = store.get("whisper", w.default);
+    $("whisper").value = w.models.some(m => m.id === sw) ? sw : w.default;
+  }
+  for (const o of $("whisper").options) {  // say which models still need downloading
+    const m = w.models.find(x => x.id === o.value);
+    if (m) o.textContent = m.label + (m.ready ? "" : `, downloads ${Math.round(m.size / 1e6)} MB once`);
   }
   if (!status.api_key_set && sel.value !== "none") $("estimate").innerHTML =
     `No API key yet, so the correction step will be skipped. Add <code>ANTHROPIC_API_KEY=…</code> to <code>${esc(status.config_file)}</code>; no restart needed.`;
@@ -235,13 +247,23 @@ async function loadStatus() {
 function updateEstimate() {
   if (!status) return;
   const m = status.models.find(x => x.id === $("model").value);
-  const runs = +$("runs").value;
-  let txt = `Whisper: about ${runs * 2}–${runs * 3}× the audio length on this computer.`;
+  const runs = +$("runs").value, turbo = $("whisper").value === "large-v3-turbo";
+  const gpu = /^GPU/.test(status.whisper.last_device || "");
+  let txt = gpu
+    ? `Whisper runs on the GPU here, usually well under the audio length per run.`
+    : `Whisper on this computer's CPU: about ${turbo ? runs : runs * 2}–${turbo ? runs * 2 : runs * 3}× the audio length.`;
   if (m) txt += ` Correction with ${m.label}: roughly $${(0.09 * m.in + 0.03 * m.out).toFixed(2)} per audio hour (estimate; the exact cost is shown after the run).`;
   else txt += " No AI cost.";
   $("estimate").textContent = txt;
 }
-for (const id of ["model", "runs", "effort"]) $(id).addEventListener("change", () => { store.set(id, $(id).value); loadStatus(); });
+for (const id of ["model", "runs", "effort", "whisper"]) $(id).addEventListener("change", () => { store.set(id, $(id).value); loadStatus(); });
+$("quit").addEventListener("click", async () => {
+  if (dirty && !confirm("You have unsaved corrections. Quit anyway?")) return;
+  if (status?.busy && !confirm("A transcription is still running. Quit anyway? It will stop.")) return;
+  try { await fetch("/api/quit", {method: "POST", headers: {"X-Transcriber": "1"}}); } catch {}
+  dirty = false;
+  document.body.innerHTML = '<main><h1>Fatwa transcript is closed</h1><p>You can close this tab. Open the app again to continue.</p></main>';
+});
 
 // ---------- file picking ----------
 const drop = $("drop");
@@ -256,7 +278,8 @@ function pick(f) { chosen = f; $("picked").textContent = `${f.name} · ${(f.size
 $("go").addEventListener("click", async () => {
   if (!chosen) return;
   $("go").disabled = true; $("go").textContent = "Uploading…";
-  const q = new URLSearchParams({filename: chosen.name, model: $("model").value, runs: $("runs").value, effort: $("effort").value});
+  const q = new URLSearchParams({filename: chosen.name, model: $("model").value, runs: $("runs").value,
+                                 effort: $("effort").value, whisper: $("whisper").value});
   try {
     const r = await fetch("/api/jobs?" + q, {method: "POST", body: chosen, headers: {"X-Transcriber": "1", "Content-Type": "application/octet-stream"}});
     const st = await r.json();

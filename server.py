@@ -1,35 +1,45 @@
 """Local web server for the transcriber page. Listens on 127.0.0.1 only and runs one job at a time.
 
-Start it with ./run.sh (or: .venv/bin/python server.py). The API key stays in config.env on this computer.
+From source: ./run.sh (or .venv/bin/python server.py). The installed app starts it through app.py.
+The API key stays in config.env on this computer; the page only learns whether one is set.
 """
 import json
-import os
 import queue
 import re
+import socket
 import subprocess
 import sys
 import threading
 import time
+import urllib.request
 import webbrowser
-from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from pipeline import config, model_download, outputs
+from pipeline import config, engines, model_download, outputs
 from pipeline.job import create_job, queue_redo, saved_runs
 
-MAX_UPLOAD = 1024 ** 3  # 1 GB
+APP_VERSION = "0.3.0"
+MAX_UPLOAD = 2 * 1024 ** 3  # 2 GB
 JOB_ID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{6}$")
 DOWNLOADS = {
     "transcript.txt": "text/plain; charset=utf-8",
     "transcript.srt": "application/x-subrip; charset=utf-8",
     "result.json": "application/json; charset=utf-8",
 }
+HTTPD = None
+
+
+def job_command(d: Path) -> list:
+    """The installed app has no separate Python: it runs jobs by starting itself in job mode."""
+    if config.FROZEN:
+        return [sys.executable, "--run-job", str(d)]
+    return [sys.executable, "-m", "pipeline.job", str(d)]
 
 
 class Worker(threading.Thread):
-    """Runs queued jobs one after another, each in its own process (Whisper uses all CPU cores)."""
+    """Runs queued jobs one after another, each in its own process (Whisper uses the whole CPU or GPU)."""
 
     def __init__(self):
         super().__init__(daemon=True)
@@ -37,12 +47,13 @@ class Worker(threading.Thread):
         self.current = None
 
     def run(self):
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
         while True:
             d = self.jobs.get()
             self.current = d.name
             with open(d / "log.txt", "ab") as log:
-                subprocess.run([sys.executable, "-m", "pipeline.job", str(d)], cwd=config.ROOT,
-                               stdout=log, stderr=subprocess.STDOUT)
+                subprocess.run(job_command(d), cwd=config.RESOURCES, stdout=log, stderr=subprocess.STDOUT,
+                               creationflags=flags)
             self.current = None
 
 
@@ -60,16 +71,27 @@ def read_state(d: Path):
     return _read_json(d / "state.json")
 
 
+def _alive(pid) -> bool:
+    """True if a job process with this id is still running (e.g. one started from the terminal).
+    psutil works on every OS; os.kill(pid, 0) would terminate the process on Windows."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        import psutil
+        return psutil.pid_exists(pid)
+    except ImportError:
+        return False
+
+
 def recover_jobs() -> None:
     """After a restart: jobs that were running are marked as stopped; queued ones run again."""
-    config.JOBS_DIR.mkdir(exist_ok=True)
     queued = []
     for d in sorted(config.JOBS_DIR.iterdir()):
         st = read_state(d) if d.is_dir() else None
         if not st:
             continue
         if st["status"] == "running" and not _alive(st.get("pid")):
-            st["status"], st["error"] = "error", "Stopped: the job ended before finishing (server or computer restarted)."
+            st["status"], st["error"] = "error", "Stopped: the job ended before finishing (app or computer restarted)."
             for s in st["steps"]:
                 if s["status"] == "running":
                     s["status"], s["detail"] = "error", "Stopped"
@@ -78,6 +100,16 @@ def recover_jobs() -> None:
             queued.append(d)
     for d in queued:
         WORKER.jobs.put(d)
+
+
+def last_device() -> str:
+    """Where Whisper ran last time (shown on the page), e.g. "GPU (Vulkan): NVIDIA GeForce GTX 1650"."""
+    if config.JOBS_DIR.exists():
+        for d in sorted(config.JOBS_DIR.iterdir(), reverse=True):
+            st = read_state(d) if d.is_dir() else None
+            if st and st.get("device"):
+                return st["device"]
+    return ""
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -150,15 +182,19 @@ class Handler(BaseHTTPRequestHandler):
         dl = f"{stem}.{name.split('.', 1)[1]}" if name.startswith("transcript") else f"{stem}.result.json"
         disposition = "attachment" if parse_qs(urlparse(self.path).query).get("download") else "inline"
         return self._send(200, (d / name).read_bytes(), DOWNLOADS[name],
-                          {"Content-Disposition": f"{disposition}; filename*=UTF-8''{_quote(dl)}"})
+                          {"Content-Disposition": f"{disposition}; filename*=UTF-8''{quote(dl, safe='')}"})
 
     def do_POST(self):
         if not self._host_ok():
             return self._error(403, "Open the page at http://127.0.0.1")
-        # A custom header that other websites can't send without permission (blocks cross-site uploads).
+        # A custom header that other websites can't send without permission (blocks cross-site requests).
         if self.headers.get("X-Transcriber") != "1":
             return self._error(403, "Missing X-Transcriber header")
         path = urlparse(self.path).path
+        if path == "/api/quit":
+            self._json({"ok": True})
+            threading.Timer(0.3, lambda: HTTPD and HTTPD.shutdown()).start()
+            return None
         m = re.match(r"^/api/jobs/([^/]+)/redo$", path)
         if m:
             return self._redo(m.group(1))
@@ -171,10 +207,10 @@ class Handler(BaseHTTPRequestHandler):
         if length <= 0:
             return self._error(400, "No file received")
         if length > MAX_UPLOAD:
-            return self._error(413, "File is larger than 1 GB")
+            return self._error(413, "File is larger than 2 GB")
         data = self.rfile.read(length)
         q = parse_qs(urlparse(self.path).query)
-        opts = {"model": q.get("model", [None])[0], "runs": q.get("runs", [2])[0], "effort": q.get("effort", [None])[0]}
+        opts = {k: q.get(k, [None])[0] for k in ("model", "runs", "effort", "whisper")}
         d = create_job(q.get("filename", ["audio"])[0], data=data, options=opts)
         WORKER.jobs.put(d)
         return self._json(read_state(d), 201)
@@ -237,16 +273,26 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(st)
 
     def _status(self) -> dict:
-        mpath = config.whisper_model_path()
+        wname = config.whisper_model_name()
         return {
+            "version": APP_VERSION,
+            "installed": config.FROZEN,
             "api_key_set": bool(config.api_key()),
             "config_file": str(config.CONFIG_FILE),
             "default_model": config.default_claude_model(),
             "default_effort": config.default_effort(),
             "models": [{"id": k, "label": v["label"], "in": v["in"], "out": v["out"]}
                        for k, v in config.CLAUDE_MODELS.items()],
-            "whisper": {"ready": model_download.is_ready(mpath), "path": str(mpath),
-                        "threads": config.whisper_threads()},
+            "whisper": {
+                "default": wname,
+                "ready": model_download.is_ready(config.whisper_model_path(wname)),
+                "models": [{"id": k, "label": v["label"], "size": v["size"],
+                            "ready": model_download.is_ready(config.whisper_model_path(k))}
+                           for k, v in config.WHISPER_MODELS.items()],
+                "engine": engines.describe_available(),
+                "last_device": last_device(),
+                "threads": config.whisper_threads(),
+            },
             "busy": WORKER.current,
             "queued": WORKER.jobs.qsize(),
         }
@@ -278,39 +324,49 @@ class Handler(BaseHTTPRequestHandler):
         self._send(206, body, "audio/wav", {"Accept-Ranges": "bytes", "Content-Range": f"bytes {start}-{end}/{size}"})
 
 
-def _alive(pid) -> bool:
-    """True if a job process with this id is still running (e.g. one started from the terminal)."""
-    if not isinstance(pid, int) or pid <= 0:
-        return False
+def _ours_running(port: int) -> bool:
+    """Is this app already running on the port? Then we just open the page instead of starting twice."""
     try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status", timeout=1.5) as r:
+            return "api_key_set" in json.loads(r.read().decode("utf-8"))
+    except (OSError, ValueError):
         return False
-    except PermissionError:
-        return True
 
 
-def _quote(s: str) -> str:
-    from urllib.parse import quote
-    return quote(s, safe="")
+def _free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) != 0
 
 
 def main() -> None:
+    global HTTPD
+    config.ensure_data_dir()
+    open_browser = "--no-browser" not in sys.argv
+    port = config.port()
+    for candidate in range(port, port + 20):
+        if _free(candidate):
+            port = candidate
+            break
+        if _ours_running(candidate):
+            print(f"Already running at http://127.0.0.1:{candidate}")
+            if open_browser:
+                webbrowser.open(f"http://127.0.0.1:{candidate}")
+            return
     recover_jobs()
     WORKER.start()
-    port = config.port()
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    HTTPD = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}"
-    print(f"Transcriber running at {url}  (Ctrl+C to stop)")
+    print(f"{config.APP_NAME} {APP_VERSION} running at {url}  (Ctrl+C or the Quit button to stop)")
+    print(f"Data folder: {config.DATA}")
     if not config.api_key():
-        print(f"No API key yet: put ANTHROPIC_API_KEY=... in {config.CONFIG_FILE} (free mode works without it).")
-    if "--no-browser" not in sys.argv:
+        print(f"No API key: free mode. To add one, put ANTHROPIC_API_KEY=... in {config.CONFIG_FILE}")
+    if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
-        httpd.serve_forever()
+        HTTPD.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopped.")
+        pass
+    print("Stopped.")
 
 
 if __name__ == "__main__":
