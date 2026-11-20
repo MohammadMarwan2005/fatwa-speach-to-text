@@ -1,4 +1,5 @@
-"""Step 6: write the transcript as plain text and as subtitles."""
+"""Step 6: write the transcript as plain text and as subtitles, and apply the user's hand edits."""
+import json
 from pathlib import Path
 
 PARAGRAPH_GAP = 1.5  # seconds of silence that start a new paragraph
@@ -19,38 +20,54 @@ def srt_time(t: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
-def write_txt(result: dict, title: str, duration: float, how: str, path: Path) -> None:
-    out = [f"{title} ({clock(duration)})", how, ""]
-    para, prev_end = [], None
+def apply_edits(result: dict, edits: dict) -> dict:
+    """A copy of the result with the user's corrected lines ({"<line id>": "text"}) put in."""
+    out = json.loads(json.dumps(result))
+    for ln in out["lines"]:
+        text = edits.get(str(ln["id"]))
+        if text is not None:
+            ln["text"] = text.strip()
+            ln["flags"] = []  # the person checked this line
+            ln["edited"] = True
+    return out
+
+
+def _blocks(result: dict, with_notes: bool):
+    """Yield (kind, text) blocks: section headings and paragraphs (a pause starts a new paragraph)."""
     notes_by_line = {}
-    for n in result.get("notes", []):
-        notes_by_line.setdefault(n["line_id"], []).append(n["note"])
-    note_no = 0
-    footnotes = []
-
-    def flush():
-        if para:
-            out.append(" ".join(para))
-            out.append("")
-            para.clear()
-
+    if with_notes:
+        for n in result.get("notes", []):
+            notes_by_line.setdefault(n["line_id"], []).append(n["note"])
+    para, prev_end, footnotes = [], None, []
     for ln in result["lines"]:
+        if ln.get("section") or (prev_end is not None and ln["start"] - prev_end >= PARAGRAPH_GAP):
+            if para:
+                yield "para", " ".join(para)
+                para = []
         if ln.get("section"):
-            flush()
-            out.append(f"{ln['section']} [{clock(ln['start'])}]")
-        elif prev_end is not None and ln["start"] - prev_end >= PARAGRAPH_GAP:
-            flush()
+            yield "section", f"{ln['section']} [{clock(ln['start'])}]" if with_notes else ln["section"]
         text = ln["text"]
         for note in notes_by_line.get(ln["id"], []):
-            note_no += 1
-            text += f" ({note_no})"
-            footnotes.append(f"({note_no}) [{clock(ln['start'])}] {note}")
-        para.append(text)
+            footnotes.append(f"({len(footnotes) + 1}) [{clock(ln['start'])}] {note}")
+            text += f" ({len(footnotes)})"
+        if text:
+            para.append(text)
         prev_end = ln["end"]
-    flush()
+    if para:
+        yield "para", " ".join(para)
     if footnotes:
-        out += ["Notes:"] + footnotes + [""]
-    path.write_text("\n".join(out), encoding="utf-8")
+        yield "notes", "Notes:\n" + "\n".join(footnotes)
+
+
+def plain_text(result: dict) -> str:
+    """Just the transcript: headings and paragraphs, no title, notes or marks. Used for "Save .txt"."""
+    return "\n\n".join(text for _, text in _blocks(result, with_notes=False)) + "\n"
+
+
+def write_txt(result: dict, title: str, duration: float, how: str, path: Path) -> None:
+    head = f"{title} ({clock(duration)})\n{how}\n\n"
+    body = "\n\n".join(text for _, text in _blocks(result, with_notes=True))
+    path.write_text(head + body + "\n", encoding="utf-8")
 
 
 def write_srt(result: dict, path: Path) -> None:

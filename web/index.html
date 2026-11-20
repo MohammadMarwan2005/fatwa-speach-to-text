@@ -41,7 +41,10 @@ h2{font-size:17px;font-weight:600;margin:0 0 12px}
 .drop b{color:var(--text);font-weight:600}
 .row{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;margin-top:14px}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--text-2)}
-select,button{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border-strong);border-radius:9px;padding:7px 10px;min-height:38px}
+select,button,input[type=text]{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--border-strong);border-radius:9px;padding:7px 10px;min-height:38px}
+.savebar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end;margin:4px 0 14px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--subtle)}
+.savebar label{flex:1 1 240px}.savebar input{width:100%}
+.savebar .msg{flex-basis:100%;font-size:13px;color:var(--text-2)}.savebar .msg.dirty{color:var(--paid)}.savebar .msg.bad{color:var(--bad)}
 button{cursor:pointer}button:hover{background:var(--subtle)}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 button.primary:hover{filter:brightness(1.07);background:var(--accent)}
@@ -80,9 +83,13 @@ audio{width:100%;margin:6px 0 14px}
 .cline::after{content:"";position:absolute;left:-7px;top:-5.5px;border-right:7px solid var(--fix-line);border-top:4.5px solid transparent;border-bottom:4.5px solid transparent}
 .cline.flag{border-color:var(--flag-line)}.cline.flag::after{border-right-color:var(--flag-line)}
 .cline.none{border:0}.cline.none::after{display:none}
-.say{direction:rtl;text-align:right;font:21px/1.95 var(--ar);padding:6px 12px;border-radius:10px;cursor:pointer;unicode-bidi:plaintext}
-.say:hover{background:var(--subtle)}.say.playing{background:var(--accent-bg)}
-.say .t{font:12px var(--ui);color:var(--muted);direction:ltr;unicode-bidi:isolate;margin-left:8px;vertical-align:middle}
+.say{direction:rtl;text-align:right;font:21px/1.95 var(--ar);padding:6px 12px;border-radius:10px}
+.say.playing{background:var(--accent-bg)}
+.say.edited{box-shadow:inset -3px 0 0 var(--accent)}
+.say .txt{outline:none;border-radius:6px;padding:0 3px;cursor:text}
+.say .txt:hover{background:var(--subtle)}
+.say .txt:focus{background:var(--surface);box-shadow:0 0 0 2px var(--accent)}
+.play{font:12px var(--ui);color:var(--text-2);direction:ltr;unicode-bidi:isolate;margin-left:8px;vertical-align:middle;padding:1px 7px;min-height:0;border-radius:6px;background:transparent}
 .sec{grid-column:1/-1;direction:rtl;text-align:right;font:600 17px/1.6 var(--ar);color:var(--accent);margin:14px 12px 0}
 mark{background:var(--fix);color:inherit;border-bottom:2px solid var(--fix-line);border-radius:3px;padding:0 1px}
 mark.flag{background:var(--flag);border-bottom-color:var(--flag-line)}
@@ -163,6 +170,11 @@ pre{white-space:pre-wrap;font:12px/1.5 var(--mono);color:var(--text-2);max-heigh
     <h2 id="res-h">Transcript</h2>
     <p class="summary" id="summary"></p>
     <div class="actions" id="actions"></div>
+    <div class="savebar">
+      <label class="f">Save as<input type="text" id="saveName" spellcheck="false" aria-label="File name"></label>
+      <button class="primary" id="saveBtn">Save .txt</button>
+      <div class="msg" id="saveMsg">Click any line to correct it. ▶ plays that line.</div>
+    </div>
     <audio id="player" controls preload="metadata"></audio>
     <div class="tr" id="tr"></div>
     <details id="rawruns"><summary>Whisper's raw runs</summary><div class="runs" id="runs-raw"></div></details>
@@ -257,6 +269,8 @@ $("go").addEventListener("click", async () => {
 
 // ---------- job view ----------
 function openJob(id) {
+  if (dirty && id !== currentJob && !confirm("You have unsaved corrections. Leave them?")) return;
+  dirty = false;
   currentJob = id; renderedResultFor = null;
   $("jobcard").hidden = false; $("resultcard").hidden = true;
   clearTimeout(pollTimer); poll();
@@ -307,6 +321,9 @@ function renderPipeline(st) {
 
 $("redoBtn").addEventListener("click", async () => {
   if (!currentJob) return;
+  if ((dirty || Object.keys(savedEdits).length) &&
+      !confirm("Running the correction again replaces your hand corrections. Continue?")) return;
+  dirty = false;
   $("redoBtn").disabled = true;
   const q = new URLSearchParams({model: $("redoModel").value, effort: $("effort").value});
   try {
@@ -325,7 +342,7 @@ async function renderResult(st) {
   $("resultcard").hidden = false;
   $("summary").textContent = res.mode === "corrected"
     ? (res.summary || "") + ` Corrected by ${status?.models.find(m => m.id === res.model)?.label || res.model}: ${res.corrections.length} fix${res.corrections.length === 1 ? "" : "es"}, $${res.usage.cost_usd.toFixed(4)}.`
-    : "Whisper's text, not corrected. Words Whisper was unsure about are marked red; click a line to hear it.";
+    : "Whisper's text, not corrected by AI. Words Whisper was unsure about are marked red: press ▶ to hear the line, then click the text to fix it.";
   const base = `/api/jobs/${st.id}/files/`;
   $("actions").innerHTML = `<button id="copy">Copy text</button>
     <a href="${base}transcript.txt?download=1"><button>Download .txt</button></a>
@@ -335,6 +352,14 @@ async function renderResult(st) {
     try { await navigator.clipboard.writeText(t); $("copy").textContent = "Copied"; } catch { $("copy").textContent = "Copy failed"; }
     setTimeout(() => $("copy").textContent = "Copy text", 1500); };
   const player = $("player"); player.src = `/api/jobs/${st.id}/audio`;
+  let saved = {};
+  try { saved = (await (await fetch(`/api/jobs/${st.id}/edits`)).json()).lines || {}; } catch {}
+  savedEdits = saved;
+  originals = Object.fromEntries(res.lines.map(l => [l.id, l.text]));
+  $("saveName").value = st.filename.replace(/\.[^.]+$/, "") + ".txt";
+  setDirty(false, Object.keys(saved).length
+    ? `${Object.keys(saved).length} line${Object.keys(saved).length === 1 ? "" : "s"} corrected by hand earlier. Click any line to correct it. ▶ plays that line.`
+    : "Click any line to correct it. ▶ plays that line.");
 
   const byLine = {}, notesBy = {};
   res.corrections.forEach((c, i) => (byLine[c.line_id] ||= []).push({...c, n: i + 1}));
@@ -367,15 +392,35 @@ async function renderResult(st) {
       }
     }
     for (const n of notesBy[ln.id] || []) cards.push(`<div class="cc note"><span class="k">Note</span><br>${esc(n.note)}</div>`);
+    const handEdited = saved[ln.id] !== undefined;
+    if (handEdited) text = esc(saved[ln.id]);  // the person's version; the cards still say what the machine did
     const kind = cards.length ? (res.mode === "corrected" ? "" : " flag") : " none";
-    html.push(`<div class="say" data-s="${ln.start}" data-e="${ln.end}" title="Play this line">${text}<span class="t">${clock(ln.start)}</span></div>
+    html.push(`<div class="say${handEdited ? " edited" : ""}" data-id="${ln.id}"><button class="play" data-s="${ln.start}" data-e="${ln.end}"
+        aria-label="Play this line from ${clock(ln.start)}">▶ ${clock(ln.start)}</button><span class="txt" contenteditable="${EDIT_MODE}"
+        spellcheck="false" lang="ar" role="textbox" aria-label="Line at ${clock(ln.start)}, editable">${text}</span></div>
       <div class="cline${kind}"></div><div class="cards">${cards.join("")}</div>`);
   }
   $("tr").innerHTML = html.join("");
-  document.querySelectorAll(".say").forEach(el => el.addEventListener("click", () => {
-    player.currentTime = +el.dataset.s; player.play(); stopAt = +el.dataset.e;
-    document.querySelectorAll(".say.playing").forEach(x => x.classList.remove("playing")); el.classList.add("playing");
+  document.querySelectorAll("#tr .play").forEach(b => b.addEventListener("click", () => {
+    player.currentTime = +b.dataset.s; player.play(); stopAt = +b.dataset.e;
+    document.querySelectorAll(".say.playing").forEach(x => x.classList.remove("playing")); b.parentElement.classList.add("playing");
   }));
+  document.querySelectorAll("#tr .txt").forEach(t => {
+    t.addEventListener("input", () => {
+      const say = t.parentElement, id = say.dataset.id;
+      say.classList.toggle("edited", lineText(t) !== squash(originals[id]));
+      setDirty(true);
+    });
+    t.addEventListener("keydown", (e) => {  // Enter moves to the next line instead of breaking this one
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const all = [...document.querySelectorAll("#tr .txt")], next = all[all.indexOf(t) + 1];
+      if (next) { next.focus(); placeCaretAtEnd(next); }
+    });
+    if (EDIT_MODE === "true") t.addEventListener("paste", (e) => {  // keep pasted text plain
+      e.preventDefault(); document.execCommand("insertText", false, e.clipboardData.getData("text/plain"));
+    });
+  });
   $("runs-raw").innerHTML = Object.entries(data.runs).map(([r, v]) =>
     `<div class="r"><b>Run ${esc(r)}</b> · ${esc(v.label)} · ${clock(v.seconds)}<p>${esc(v.segments.map(s => s.text).join(" "))}</p></div>`).join("");
 }
@@ -396,6 +441,63 @@ function heardAt(line, baseRun, textRun, word) {
     return [r, texts[r]];
   });
 }
+// ---------- correcting and saving ----------
+const EDIT_MODE = (() => { const d = document.createElement("div"); d.contentEditable = "plaintext-only";
+  return d.contentEditable === "plaintext-only" ? "plaintext-only" : "true"; })();
+let originals = {}, savedEdits = {}, dirty = false;
+const squash = (s) => String(s || "").replace(/\s+/g, " ").trim();
+function lineText(el) {  // the line's words without the little correction numbers
+  const c = el.cloneNode(true); c.querySelectorAll("sup").forEach(s => s.remove()); return squash(c.textContent);
+}
+function placeCaretAtEnd(el) { const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+  const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+function setDirty(on, text) {
+  dirty = on;
+  $("saveMsg").textContent = text || (on ? "Unsaved changes." : $("saveMsg").textContent);
+  $("saveMsg").className = "msg" + (on ? " dirty" : "");
+}
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+$("saveBtn").addEventListener("click", async () => {
+  if (!currentJob) return;
+  let name = squash($("saveName").value).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_") || "transcript";
+  if (!/\.txt$/i.test(name)) name += ".txt";
+  $("saveName").value = name;
+  $("saveBtn").disabled = true;
+  // Ask where to save first (Chrome/Edge), while the click still counts as the user's action.
+  let handle = null, cancelled = false;
+  if (window.showSaveFilePicker) {
+    try { handle = await showSaveFilePicker({suggestedName: name, types: [{description: "Text file", accept: {"text/plain": [".txt"]}}]}); }
+    catch (e) { cancelled = e.name === "AbortError"; }
+  }
+  try {
+    const lines = {};
+    document.querySelectorAll("#tr .say").forEach(s => lines[s.dataset.id] = lineText(s.querySelector(".txt")));
+    const r = await fetch(`/api/jobs/${currentJob}/edits`, {method: "POST", body: JSON.stringify({lines}),
+      headers: {"X-Transcriber": "1", "Content-Type": "application/json"}});
+    const out = await r.json();
+    if (!r.ok) throw new Error(out.error || r.statusText);
+    const fixes = `${out.edited} line${out.edited === 1 ? "" : "s"} corrected by hand`;
+    const blob = new Blob([out.text], {type: "text/plain;charset=utf-8"});
+    let where;
+    if (handle) {
+      const w = await handle.createWritable(); await w.write(blob); await w.close();
+      where = `Saved as ${handle.name}.`;
+    } else if (cancelled) {
+      where = "No file written (you cancelled), but your corrections are kept in the app.";
+    } else {
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      where = `Saved ${name} to your Downloads folder.`;
+    }
+    setDirty(false, `${where} ${fixes}; the .txt and .srt downloads above include them.`);
+    savedEdits = Object.fromEntries(Object.entries(lines).filter(([id, t]) => t !== squash(originals[id])));
+  } catch (err) {
+    $("saveMsg").textContent = "Couldn't save: " + err.message; $("saveMsg").className = "msg bad";
+  }
+  $("saveBtn").disabled = false;
+});
+
 let stopAt = null;
 $("player").addEventListener("timeupdate", () => { if (stopAt !== null && $("player").currentTime >= stopAt) { $("player").pause(); stopAt = null; } });
 $("player").addEventListener("pause", () => document.querySelectorAll(".say.playing").forEach(x => x.classList.remove("playing")));

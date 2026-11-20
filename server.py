@@ -9,13 +9,14 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from pipeline import config, model_download
+from pipeline import config, model_download, outputs
 from pipeline.job import create_job, queue_redo, saved_runs
 
 MAX_UPLOAD = 1024 ** 3  # 1 GB
@@ -48,11 +49,15 @@ class Worker(threading.Thread):
 WORKER = Worker()
 
 
-def read_state(d: Path):
+def _read_json(p: Path):
     try:
-        return json.loads((d / "state.json").read_text(encoding="utf-8"))
+        return json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+
+
+def read_state(d: Path):
+    return _read_json(d / "state.json")
 
 
 def recover_jobs() -> None:
@@ -125,7 +130,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self._status())
         if path == "/api/jobs":
             return self._json(self._list_jobs())
-        m = re.match(r"^/api/jobs/([^/]+)(?:/(files/[^/]+|audio))?$", path)
+        m = re.match(r"^/api/jobs/([^/]+)(?:/(files/[^/]+|audio|edits))?$", path)
         if not m:
             return self._error(404, "Not found")
         d = self._job_dir(m.group(1))
@@ -135,6 +140,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(read_state(d))
         if m.group(2) == "audio":
             return self._audio(d / "plain.wav")
+        if m.group(2) == "edits":
+            return self._json(_read_json(d / "edits.json") or {"lines": {}, "saved_at": None})
         name = unquote(m.group(2)[len("files/"):])
         if name not in DOWNLOADS or not (d / name).exists():
             return self._error(404, "File not ready")
@@ -155,6 +162,9 @@ class Handler(BaseHTTPRequestHandler):
         m = re.match(r"^/api/jobs/([^/]+)/redo$", path)
         if m:
             return self._redo(m.group(1))
+        m = re.match(r"^/api/jobs/([^/]+)/edits$", path)
+        if m:
+            return self._save_edits(m.group(1))
         if path != "/api/jobs":
             return self._error(404, "Not found")
         length = int(self.headers.get("Content-Length") or 0)
@@ -170,6 +180,42 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(read_state(d), 201)
 
     # --- route bodies --------------------------------------------------------
+    def _save_edits(self, job_id: str) -> None:
+        """Store the person's corrected lines, rewrite transcript.txt/.srt with them,
+        and return the clean text for the "Save .txt" file."""
+        d = self._job_dir(job_id)
+        if d is None:
+            return self._error(404, "No such job")
+        payload = _read_json(d / "result.json")
+        if payload is None:
+            return self._error(409, "This job has no transcript yet")
+        length = int(self.headers.get("Content-Length") or 0)
+        if not 0 < length <= 5 * 1024 * 1024:
+            return self._error(400, "Nothing to save")
+        try:
+            sent = json.loads(self.rfile.read(length).decode("utf-8"))["lines"]
+            assert isinstance(sent, dict)
+        except (ValueError, KeyError, AssertionError, UnicodeDecodeError):
+            return self._error(400, "Expected {\"lines\": {\"<line id>\": \"text\"}}")
+        result = payload["result"]
+        original = {str(ln["id"]): ln["text"] for ln in result["lines"]}
+        edits = {}
+        for line_id, text in sent.items():
+            if line_id in original and isinstance(text, str):
+                text = " ".join(text.split())[:20000]
+                if text != " ".join(original[line_id].split()):
+                    edits[line_id] = text
+        (d / "edits.json").write_text(json.dumps({"lines": edits, "saved_at": time.time()},
+                                                 ensure_ascii=False, indent=1), encoding="utf-8")
+        edited = outputs.apply_edits(result, edits)
+        st = read_state(d)
+        how = payload.get("how") or "Whisper large-v3."
+        if edits:
+            how += f" {len(edits)} line{'s' if len(edits) != 1 else ''} corrected by hand."
+        outputs.write_txt(edited, Path(st["filename"]).stem, st.get("duration", 0), how, d / "transcript.txt")
+        outputs.write_srt(edited, d / "transcript.srt")
+        return self._json({"ok": True, "edited": len(edits), "text": outputs.plain_text(edited)})
+
     def _redo(self, job_id: str) -> None:
         """Run steps 4-6 again with the chosen model, reusing the job's Whisper runs."""
         d = self._job_dir(job_id)

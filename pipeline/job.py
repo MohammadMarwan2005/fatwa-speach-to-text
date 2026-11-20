@@ -85,6 +85,7 @@ def queue_redo(d: Path, model: str, effort: str) -> dict:
     opts = _clean_options({"model": model, "effort": effort, "runs": st["options"]["runs"]})
     st["options"].update(model=opts["model"], effort=opts["effort"])
     st.update(status="queued", redo=True, error="", warning="")
+    (d / "edits.json").unlink(missing_ok=True)  # the new correction replaces hand edits (the page asks first)
     for s in st["steps"]:
         if s["key"] in REDO_STEPS:
             s.update(status="pending", detail="", fraction=0, started=None, ended=None)
@@ -250,7 +251,7 @@ def run(d: Path) -> int:
             how = "Whisper large-v3 only, not corrected. (?) marks words Whisper was unsure about."
             outputs.write_txt(_mark_unsure(result), title, st["duration"], how, d / "transcript.txt")
         outputs.write_srt(result, d / "transcript.srt")
-        payload = {"result": result, "compared": compared,
+        payload = {"result": result, "compared": compared, "how": how,
                    "runs": {k: {"label": v["label"], "seconds": v["seconds"], "segments": v["segments"]}
                             for k, v in runs.items()}}
         (d / "result.json").write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
