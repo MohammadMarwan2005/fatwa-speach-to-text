@@ -151,7 +151,13 @@ jobs:
           mkdir -p dist-installer dmg
           cp -R "dist/Fatwa Transcript.app" dmg/
           ln -s /Applications dmg/Applications
-          hdiutil create -volname "Fatwa Transcript" -srcfolder dmg -ov -format UDZO "dist-installer/FatwaTranscript-${{ matrix.name }}.dmg"
+          # hdiutil sometimes fails at random on GitHub's Mac machines ("Resource busy"): try a few times.
+          for i in 1 2 3 4 5; do
+            hdiutil create -volname "Fatwa Transcript" -srcfolder dmg -ov -format UDZO \
+              "dist-installer/FatwaTranscript-${{ matrix.name }}.dmg" && break
+            echo "hdiutil failed (attempt $i), retrying in 15 s"; sleep 15
+          done
+          test -f "dist-installer/FatwaTranscript-${{ matrix.name }}.dmg"
 
       - uses: actions/upload-artifact@v7
         with:
