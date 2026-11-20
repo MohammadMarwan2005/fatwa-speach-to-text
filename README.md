@@ -1,9 +1,36 @@
 # Fatwa transcript
 
 Turns Arabic voice notes (lessons, sermons, questions and fatwas) into a corrected transcript.
-Runs on your own computer: a page in your browser, plus a small local server.
+Runs on your own computer: a page in your browser, plus a small local server. Free without an API key.
 
-## Start
+## Install the app (Windows, macOS, Linux)
+
+Installers are built automatically by GitHub Actions for every change (Actions tab → latest run →
+Artifacts) and attached to each tagged release.
+
+| System | File | First launch |
+|---|---|---|
+| Windows 10/11 (x64) | `FatwaTranscript-Setup-windows-x64.exe` | The app isn't code-signed yet, so Windows shows "Windows protected your PC": click **More info → Run anyway**. Installs for your user only, no admin needed. |
+| macOS, Apple Silicon (M1 or newer) | `FatwaTranscript-macos-arm64.dmg` | Drag the app to Applications. It isn't notarized yet, so the first time: right-click the app → **Open** → **Open**. If macOS says it's damaged, run `xattr -dr com.apple.quarantine "/Applications/Fatwa Transcript.app"` once in Terminal. |
+| macOS, Intel | `FatwaTranscript-macos-x64.dmg` | Same as above (experimental build). |
+| Linux x64 (Ubuntu 22.04+, Mint 21+, Debian 12+) | `FatwaTranscript-linux-x64.tar.gz` | Unpack it, run `./install.sh` once to add it to the applications menu, then open it from the menu. |
+
+Opening the app starts it in the background and opens the page in your browser. **Quit app** (top right) stops it.
+The first transcription downloads the Whisper model once (1.1 GB, or 574 MB for the faster model).
+
+**Speed on every kind of laptop.** Whisper runs through whisper.cpp, built to use the fastest hardware it finds:
+- NVIDIA, AMD and Intel graphics on Windows and Linux (Vulkan; needs the normal graphics driver),
+- the Apple GPU on M-series Macs (Metal),
+- otherwise the CPU, with the fastest instruction set the processor has (AVX, AVX2, AVX-512, ARM NEON).
+
+The page shows where Whisper ran (for example `GPU (Vulkan): NVIDIA GeForce GTX 1650`). On slow laptops, choose
+**Faster (large-v3-turbo)** under Whisper model.
+
+**Where your files are.** The installed app keeps `config.env`, the jobs and the models in your user folder:
+`%LOCALAPPDATA%\FatwaTranscript` (Windows), `~/Library/Application Support/FatwaTranscript` (macOS),
+`~/.local/share/fatwa-transcript` (Linux). Put your API key in that `config.env`.
+
+## Run from source (developers)
 
 ```bash
 ./run.sh
@@ -53,8 +80,8 @@ the API retries it on another model in the same call.
 
 ## Speed
 
-Whisper runs on the CPU at roughly 2–3× the audio length per run. A 1-minute voice note takes about
-5 minutes with 2 runs; a 1-hour lecture would take hours. Long recordings are sent to Claude in parts
+On a 4-core laptop CPU, Whisper large-v3 takes roughly 2–3× the audio length per run (measured), so a
+1-minute voice note takes about 5 minutes with 2 runs. A GPU, or the turbo model, makes this much faster. Long recordings are sent to Claude in parts
 of about 120 lines.
 
 ## From the terminal
@@ -70,22 +97,30 @@ Results go to `jobs/<id>/` and show up on the page too.
 ## Files
 
 ```
+app.py                entry point of the installed app (also: python app.py)
 config.env            your API key and optional settings (not shared)
 config.example.env    the same, without a key, to share
-run.sh                set up and start
+run.sh                set up and start from source
 server.py             local server, 127.0.0.1 only, one job at a time
 pipeline/
   audio.py            step 2
-  whisper_runs.py     step 3, and the religious prompt
+  whisper_runs.py     step 3: the runs, the religious prompt, tokens -> words
+  engines.py          how Whisper runs: bundled whisper-cli (GPU/CPU) or the Python binding
   compare.py          step 4
   correct.py          step 5, and the correction rules sent to Claude
-  outputs.py          step 6
+  outputs.py          step 6, and hand edits
   job.py              runs the steps and records them in jobs/<id>/state.json
   config.py           paths, models, prices, settings
-  model_download.py   downloads and checks the Whisper model
+  model_download.py   downloads and checks the Whisper models
 web/index.html        the page
+packaging/            PyInstaller recipe, Windows installer, Linux menu entry, build-machine test
+.github/workflows/    builds and tests the installers on Windows, macOS and Linux
 jobs/                 one folder per transcription (input, WAV, runs, results, log)
 ```
+
+Optional settings in `config.env`: `WHISPER_MODEL` (large-v3 or large-v3-turbo), `WHISPER_GPU=off`,
+`WHISPER_THREADS`, `WHISPER_ENGINE` (auto, cli or python), `WHISPER_CLI` (path to a whisper-cli),
+`WHISPER_LANGUAGE` (default ar), `CLAUDE_MODEL`, `CLAUDE_EFFORT`, `PORT`.
 
 To change how Claude corrects, edit `SYSTEM_PROMPT` in `pipeline/correct.py`.
 To change the Whisper prompt, edit `RELIGIOUS_PROMPT` in `pipeline/whisper_runs.py`.
