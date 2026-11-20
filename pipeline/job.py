@@ -43,7 +43,8 @@ def _clean_options(options: dict) -> dict:
         runs = min(3, max(1, int(options.get("runs", 2))))
     except (TypeError, ValueError):
         runs = 2
-    return {"model": model, "effort": effort, "runs": runs}
+    return {"model": model, "effort": effort, "runs": runs,
+            "whisper": config.whisper_model_name(options.get("whisper") or "")}
 
 
 def create_job(filename: str, data: bytes = None, src: Path = None, options: dict = None) -> Path:
@@ -82,7 +83,8 @@ def saved_runs(d: Path) -> dict:
 def queue_redo(d: Path, model: str, effort: str) -> dict:
     """Mark a finished job to run steps 4-6 again with another model, reusing its Whisper runs."""
     st = json.loads((d / "state.json").read_text(encoding="utf-8"))
-    opts = _clean_options({"model": model, "effort": effort, "runs": st["options"]["runs"]})
+    opts = _clean_options({"model": model, "effort": effort, "runs": st["options"]["runs"],
+                           "whisper": st["options"].get("whisper", "")})
     st["options"].update(model=opts["model"], effort=opts["effort"])
     st.update(status="queued", redo=True, error="", warning="")
     (d / "edits.json").unlink(missing_ok=True)  # the new correction replaces hand edits (the page asks first)
@@ -161,12 +163,14 @@ def _audio_and_whisper(job: Job) -> dict:
         st["duration"] = (d / "plain.wav").stat().st_size / 32000
     job.finish("convert", f"16 kHz mono WAV, {outputs.clock(st['duration'])}")
 
-    from . import whisper_runs  # imported here so a missing model doesn't break the other steps' imports
+    from . import engines, whisper_runs
     job.start("whisper", "Checking the Whisper model")
-    mpath = config.whisper_model_path()
+    wname = opts.get("whisper") or config.whisper_model_name()
+    mpath = config.whisper_model_path(wname)
     if not model_download.is_ready(mpath):
         model_download.ensure_model(mpath, lambda f: job.progress(
-            "whisper", f * 0.05, f"Downloading the Whisper model, {f * 100:.0f}%"))
+            "whisper", f * 0.05, f"Downloading the Whisper model ({wname}), {f * 100:.0f}%"))
+    engine = engines.get_engine()
     chosen = whisper_runs.RUNS[:opts["runs"]]
     runs = {}
     (d / "runs").mkdir(exist_ok=True)
@@ -174,19 +178,18 @@ def _audio_and_whisper(job: Job) -> dict:
         label = f"Run {r['id']} of {len(chosen)}: {r['label'].lower()}"
         job.progress("whisper", 0.05 + 0.95 * k / len(chosen), label)
         t0 = time.time()
-        # A fresh model per run: whisper.cpp otherwise feeds the previous run's text in as context,
-        # and the runs would copy each other instead of disagreeing where Whisper is unsure.
-        model = whisper_runs.load_model(mpath, config.whisper_threads())
-        res = whisper_runs.transcribe(
-            model, d / f"{r['audio']}.wav", r["prompt"], st["duration"],
+        res = engine.transcribe(
+            mpath, d / f"{r['audio']}.wav", r["prompt"], st["duration"],
             lambda f, k=k, label=label: job.progress(
                 "whisper", 0.05 + 0.95 * (k + f) / len(chosen), f"{label}, {f * 100:.0f}%"))
-        del model
-        res.update(id=r["id"], label=r["label"], seconds=round(time.time() - t0, 1))
+        res.update(id=r["id"], label=r["label"], seconds=round(time.time() - t0, 1), device=engine.device)
         (d / "runs" / f"{r['id']}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
         runs[r["id"]] = res
     secs = sum(r["seconds"] for r in runs.values())
-    job.finish("whisper", f"{len(runs)} run{'s' if len(runs) > 1 else ''} of Whisper large-v3, {outputs.clock(secs)}")
+    speed = f", {secs / st['duration']:.1f}× audio length" if st.get("duration") else ""
+    st["device"] = engine.device
+    job.finish("whisper", f"{len(runs)} run{'s' if len(runs) > 1 else ''} of Whisper {wname} on {engine.device}, "
+                          f"{outputs.clock(secs)}{speed}")
     return runs
 
 
@@ -243,12 +246,13 @@ def run(d: Path) -> int:
         # 6. Save
         job.start("save")
         title = Path(st["filename"]).stem
+        wname = opts.get("whisper") or config.DEFAULT_WHISPER_MODEL
         if result["mode"] == "corrected":
             how = (f"Corrected by {config.CLAUDE_MODELS[opts['model']]['label']} "
-                   f"from {len(runs)} Whisper large-v3 run{'s' if len(runs) > 1 else ''}.")
+                   f"from {len(runs)} Whisper {wname} run{'s' if len(runs) > 1 else ''}.")
             outputs.write_txt(result, title, st["duration"], how, d / "transcript.txt")
         else:
-            how = "Whisper large-v3 only, not corrected. (?) marks words Whisper was unsure about."
+            how = f"Whisper {wname} only, not corrected. (?) marks words Whisper was unsure about."
             outputs.write_txt(_mark_unsure(result), title, st["duration"], how, d / "transcript.txt")
         outputs.write_srt(result, d / "transcript.srt")
         payload = {"result": result, "compared": compared, "how": how,
@@ -277,6 +281,7 @@ def main(argv=None) -> int:
     ap.add_argument("--model", default=None, help="claude-opus-5-5, claude-sonnet-5-5, claude-haiku-5-5 or none")
     ap.add_argument("--runs", type=int, default=2, help="Whisper runs: 1, 2 or 3")
     ap.add_argument("--effort", default=None, help="low, medium or high")
+    ap.add_argument("--whisper", default=None, help="large-v3 (best accuracy) or large-v3-turbo (faster)")
     ap.add_argument("--redo", action="store_true", help="with a job folder: run the correction again on its saved runs")
     a = ap.parse_args(argv)
     if a.job_dir:
@@ -286,7 +291,9 @@ def main(argv=None) -> int:
         return run(d)
     if not a.file:
         ap.error("give a job folder or --file")
-    d = create_job(Path(a.file).name, src=Path(a.file), options={"model": a.model, "runs": a.runs, "effort": a.effort})
+    config.ensure_data_dir()
+    d = create_job(Path(a.file).name, src=Path(a.file),
+                   options={"model": a.model, "runs": a.runs, "effort": a.effort, "whisper": a.whisper})
     code = run(d)
     st = json.loads((d / "state.json").read_text(encoding="utf-8"))
     for s in st["steps"]:

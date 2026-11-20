@@ -1,12 +1,10 @@
-"""Step 3: run Whisper large-v3 (whisper.cpp) and keep every word with its timing and confidence."""
+"""Step 3: the Whisper runs, the prompt, and turning Whisper's tokens into words with timing and confidence.
+
+How Whisper is executed (bundled whisper-cli with GPU support, or the Python binding) lives in engines.py.
+"""
 import re
 from pathlib import Path
 from typing import Callable, Optional
-
-import _pywhispercpp as pw
-from pywhispercpp.model import Model
-
-from .audio import load_wav
 
 # Opening formulas of a sermon or fatwa. Steers Whisper towards classical vocabulary and punctuation.
 RELIGIOUS_PROMPT = (
@@ -21,29 +19,16 @@ RUNS = [
     {"id": "C", "label": "Cleaned audio, with prompt", "audio": "clean", "prompt": RELIGIOUS_PROMPT},
 ]
 
-
-def load_model(model_path: Path, threads: int) -> Model:
-    return Model(str(model_path), params_sampling_strategy=1, n_threads=threads,
-                 print_progress=False, print_realtime=False)
-
-
 _PUNCT_ONLY = re.compile(r"^[\s،؛؟۔.,!?:;\"'«»()\-…]+$")
 
 
-def _words_of_segment(ctx, i: int, seg_t0: float, seg_t1: float, eot: int) -> list:
-    """Join Whisper's sub-word tokens into words; a token starting with a space starts a new word.
-    A word's confidence is its least sure token, not counting punctuation tokens (an unsure comma
-    shouldn't flag the word before it)."""
+def merge_tokens(tokens: list, seg_t0: float, seg_t1: float) -> list:
+    """tokens: [(bytes, p, t0_seconds, t1_seconds)] without special tokens.
+    A token starting with a space starts a new word. A word's confidence is its least sure token,
+    not counting punctuation tokens (an unsure comma shouldn't flag the word before it)."""
     words, cur = [], None
-    for j in range(pw.whisper_full_n_tokens(ctx, i)):
-        tid = pw.whisper_full_get_token_id(ctx, i, j)
-        if tid >= eot:  # special and timestamp tokens
-            continue
-        data = pw.whisper_full_get_token_data(ctx, i, j)
-        b = pw.whisper_token_to_bytes(ctx, tid)
-        p = float(pw.whisper_full_get_token_p(ctx, i, j))
+    for b, p, t0, t1 in tokens:
         punct = bool(_PUNCT_ONLY.match(b.decode("utf-8", "ignore") or " "))
-        t0, t1 = data.t0 / 100, data.t1 / 100
         if cur is None or b.startswith(b" "):
             if cur:
                 words.append(cur)
@@ -78,17 +63,27 @@ def _fix_word_times(words: list, seg_t0: float, seg_t1: float) -> None:
         w["e"] = round(seg_t0 + (seg_t1 - seg_t0) * pos / total, 2)
 
 
-def transcribe(model: Model, wav: Path, prompt: str, duration: float,
+# --- Python binding (pywhispercpp, CPU). Used when running from source without a bundled whisper-cli. ---
+
+def load_model(model_path: Path, threads: int):
+    from pywhispercpp.model import Model
+    return Model(str(model_path), params_sampling_strategy=1, n_threads=threads,
+                 print_progress=False, print_realtime=False)
+
+
+def transcribe(model, wav: Path, prompt: str, duration: float,
                progress: Optional[Callable[[float], None]] = None) -> dict:
-    audio = load_wav(wav)
+    import _pywhispercpp as pw
+    from .audio import load_wav
+    from .config import whisper_language
 
     def on_segment(seg):
         if progress and duration > 0:
             progress(min(1.0, (seg.t1 / 100) / duration))
 
     segs = model.transcribe(
-        audio,
-        language="ar",
+        load_wav(wav),
+        language=whisper_language(),
         initial_prompt=prompt,  # always set: pywhispercpp keeps the previous call's value otherwise
         beam_search={"beam_size": 5, "patience": -1.0},
         greedy={"best_of": 5},
@@ -101,7 +96,15 @@ def transcribe(model: Model, wav: Path, prompt: str, duration: float,
     segments = []
     for i, s in enumerate(segs):
         t0, t1 = s.t0 / 100, s.t1 / 100
-        words = _words_of_segment(ctx, i, t0, t1, eot)
+        tokens = []
+        for j in range(pw.whisper_full_n_tokens(ctx, i)):
+            tid = pw.whisper_full_get_token_id(ctx, i, j)
+            if tid >= eot:  # special and timestamp tokens
+                continue
+            data = pw.whisper_full_get_token_data(ctx, i, j)
+            tokens.append((pw.whisper_token_to_bytes(ctx, tid), float(pw.whisper_full_get_token_p(ctx, i, j)),
+                           data.t0 / 100, data.t1 / 100))
+        words = merge_tokens(tokens, t0, t1)
         if words:
             segments.append({"start": round(t0, 2), "end": round(t1, 2), "text": s.text.strip(), "words": words})
     return {"segments": segments}

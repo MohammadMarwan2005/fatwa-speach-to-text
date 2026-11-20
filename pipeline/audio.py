@@ -1,14 +1,16 @@
 """Step 2: convert any audio/video file to the 16 kHz mono WAV that Whisper reads."""
 import re
 import subprocess
+import sys
 import wave
 from pathlib import Path
 
-import numpy as np
 import imageio_ffmpeg
 
 # Light cleanup, used only by the optional third run. On clean recordings it can make Whisper worse.
 CLEAN_FILTER = "highpass=f=70,afftdn=nr=10:nf=-40,loudnorm=I=-18:TP=-2:LRA=11"
+# On Windows, don't flash a console window for each ffmpeg call from the installed (windowless) app.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
 
 
 def ffmpeg() -> str:
@@ -17,7 +19,8 @@ def ffmpeg() -> str:
 
 def duration_seconds(src: Path) -> float:
     """Read the duration ffmpeg prints for the input (0.0 if it can't tell)."""
-    out = subprocess.run([ffmpeg(), "-hide_banner", "-i", str(src)], capture_output=True, text=True).stderr
+    out = subprocess.run([ffmpeg(), "-hide_banner", "-i", str(src)], capture_output=True, text=True,
+                         encoding="utf-8", errors="replace", creationflags=_NO_WINDOW).stderr
     m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", out)
     if not m:
         return 0.0
@@ -30,12 +33,15 @@ def to_wav(src: Path, dst: Path, clean: bool = False) -> None:
     if clean:
         cmd += ["-af", CLEAN_FILTER]
     cmd += ["-c:a", "pcm_s16le", str(dst)]
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                         creationflags=_NO_WINDOW)
     if res.returncode != 0 or not dst.exists():
         raise RuntimeError(f"ffmpeg could not read this file: {res.stderr.strip()[:300] or 'unknown error'}")
 
 
-def load_wav(path: Path) -> np.ndarray:
+def load_wav(path: Path):
+    """Float samples for the Python engine (numpy is only needed there)."""
+    import numpy as np
     with wave.open(str(path), "rb") as w:
         if w.getframerate() != 16000 or w.getnchannels() != 1:
             raise ValueError("expected 16 kHz mono WAV")
