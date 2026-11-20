@@ -11,7 +11,7 @@
   --page:#f6f5f1;--surface:#ffffff;--subtle:#efede6;--text:#24231f;--text-2:#5f5d56;--muted:#8a877e;
   --border:#dedbd2;--border-strong:#b9b5aa;--accent:#2f6fb3;--accent-bg:#e7f0fa;
   --free:#2f7a4f;--free-bg:#e5f3ea;--paid:#8a5a0e;--paid-bg:#fbefd9;--bad:#a63a32;--bad-bg:#fbe9e7;
-  --fix:#fff1c2;--fix-line:#d49b16;--flag:#fbe3e0;--flag-line:#c2554b;
+  --fix:#fff1c2;--fix-line:#d49b16;--flag:#fbe3e0;--flag-line:#c2554b;--sug:#6a4fc4;--sug-bg:#efeafd;
   --ui:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;
   --ar:"Noto Naskh Arabic","Amiri","Scheherazade New","Geeza Pro","Arial",serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
@@ -20,12 +20,12 @@
   --page:#1b1b19;--surface:#252522;--subtle:#2e2e2a;--text:#ecebe6;--text-2:#b5b3ab;--muted:#8d8b84;
   --border:#3b3a36;--border-strong:#55534d;--accent:#7fb2ea;--accent-bg:#1f3349;
   --free:#7fcf9f;--free-bg:#1c3a29;--paid:#f0c072;--paid-bg:#463313;--bad:#f0938a;--bad-bg:#4a221e;
-  --fix:#4a3c12;--fix-line:#e0b043;--flag:#4a2420;--flag-line:#e07a70;color-scheme:dark}}
+  --fix:#4a3c12;--fix-line:#e0b043;--flag:#4a2420;--flag-line:#e07a70;--sug:#b9a6f5;--sug-bg:#2f2550;color-scheme:dark}}
 :root[data-theme="dark"]{
   --page:#1b1b19;--surface:#252522;--subtle:#2e2e2a;--text:#ecebe6;--text-2:#b5b3ab;--muted:#8d8b84;
   --border:#3b3a36;--border-strong:#55534d;--accent:#7fb2ea;--accent-bg:#1f3349;
   --free:#7fcf9f;--free-bg:#1c3a29;--paid:#f0c072;--paid-bg:#463313;--bad:#f0938a;--bad-bg:#4a221e;
-  --fix:#4a3c12;--fix-line:#e0b043;--flag:#4a2420;--flag-line:#e07a70;color-scheme:dark}
+  --fix:#4a3c12;--fix-line:#e0b043;--flag:#4a2420;--flag-line:#e07a70;--sug:#b9a6f5;--sug-bg:#2f2550;color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;background:var(--page);color:var(--text);font:15px/1.55 var(--ui)}
 main{max-width:1080px;margin:0 auto;padding:24px 16px 64px;display:flex;flex-direction:column;gap:20px}
@@ -90,6 +90,8 @@ audio{width:100%;margin:6px 0 14px}
 .say .txt:hover{background:var(--subtle)}
 .say .txt:focus{background:var(--surface);box-shadow:0 0 0 2px var(--accent)}
 .play{font:12px var(--ui);color:var(--text-2);direction:ltr;unicode-bidi:isolate;margin-left:8px;vertical-align:middle;padding:1px 7px;min-height:0;border-radius:6px;background:transparent}
+.chk{font:13px var(--ui);color:var(--muted);vertical-align:middle;padding:0 7px;min-height:0;border-radius:6px;background:transparent;margin-left:6px}
+.chk[aria-pressed="true"]{color:var(--free);border-color:var(--free);background:var(--free-bg)}
 .sec{grid-column:1/-1;direction:rtl;text-align:right;font:600 17px/1.6 var(--ar);color:var(--accent);margin:14px 12px 0}
 mark{background:var(--fix);color:inherit;border-bottom:2px solid var(--fix-line);border-radius:3px;padding:0 1px}
 mark.flag{background:var(--flag);border-bottom-color:var(--flag-line)}
@@ -97,6 +99,16 @@ mark sup,.cn{font:600 10.5px var(--ui);color:var(--fix-line)}
 mark.flag sup,.cn.flag{color:var(--flag-line)}
 .cc{border:1px solid var(--fix-line);border-radius:10px;padding:6px 10px;font-size:12.5px;line-height:1.5;background:var(--surface);color:var(--text-2)}
 .cc.flag{border-color:var(--flag-line)}.cc.note{border-color:var(--border-strong)}
+mark.sug{background:var(--sug-bg);border-bottom:2px dotted var(--sug)}mark.sug sup,.cn.sug{color:var(--sug)}
+mark sup{margin-inline:2px}
+.cc.sug{border-color:var(--sug)}.cc.sug.done{opacity:.6}.cc.sug button{min-height:28px;padding:2px 10px;font-size:12.5px;margin-top:4px}
+.cline.sug{border-color:var(--sug)}.cline.sug::after{border-right-color:var(--sug)}
+.learned{width:100%;border-collapse:collapse;font-size:14px}
+.learned td,.learned th{padding:7px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
+.learned th{font-weight:600;color:var(--text-2);font-size:12.5px}
+.learned .ar{font-size:18px}.learned button{min-height:28px;padding:2px 10px;font-size:12.5px}
+.learned-bar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-bottom:10px}
+@media (max-width:700px){.learned .ctx{display:none}}
 .cc .k{font-weight:600;color:var(--text)}
 .ar{font:16px var(--ar);direction:rtl;unicode-bidi:isolate;color:var(--text)}
 details{margin-top:12px}summary{cursor:pointer;color:var(--text-2);font-size:14px}
@@ -176,6 +188,8 @@ pre{white-space:pre-wrap;font:12px/1.5 var(--mono);color:var(--text-2);max-heigh
     <div class="savebar">
       <label class="f">Save as<input type="text" id="saveName" spellcheck="false" aria-label="File name"></label>
       <button class="primary" id="saveBtn">Save .txt</button>
+      <button id="applyAll" hidden title="Applies the learned fixes marked sure; check them, then save"></button>
+      <button id="checkAll" title="Marks every line as checked: you listened and the whole text is right">Mark all checked ✓</button>
       <div class="msg" id="saveMsg">Click any line to correct it. ▶ plays that line.</div>
     </div>
     <audio id="player" controls preload="metadata"></audio>
@@ -186,6 +200,21 @@ pre{white-space:pre-wrap;font:12px/1.5 var(--mono);color:var(--text-2);max-heigh
   <section class="card" aria-labelledby="hist-h">
     <h2 id="hist-h">Past transcripts</h2>
     <div class="hist" id="hist"><span class="empty">None yet.</span></div>
+  </section>
+
+  <section class="card" aria-labelledby="learned-h">
+    <h2 id="learned-h">Learned fixes</h2>
+    <div class="learned-bar">
+      <span class="hint" id="learnedInfo" style="margin:0;flex:1 1 300px">Learned from the corrections you save. Used as suggestions in new transcripts and as hints for Whisper.</span>
+      <a href="/api/learned/export"><button>Export</button></a>
+      <button id="importBtn">Import</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+    <div id="learned"><span class="empty">Nothing learned yet. Correct a transcript and save it.</span></div>
+    <div class="learned-bar" style="margin:14px 0 0">
+      <span class="hint" id="trainingInfo" style="margin:0;flex:1 1 300px"></span>
+      <a href="/api/training/export" id="trainingExport"><button>Export training data (.zip)</button></a>
+    </div>
   </section>
 </main>
 
@@ -375,8 +404,14 @@ async function renderResult(st) {
     try { await navigator.clipboard.writeText(t); $("copy").textContent = "Copied"; } catch { $("copy").textContent = "Copy failed"; }
     setTimeout(() => $("copy").textContent = "Copy text", 1500); };
   const player = $("player"); player.src = `/api/jobs/${st.id}/audio`;
-  let saved = {};
-  try { saved = (await (await fetch(`/api/jobs/${st.id}/edits`)).json()).lines || {}; } catch {}
+  let sugs = {};
+  try { sugs = await (await fetch(`/api/jobs/${st.id}/suggestions`)).json(); } catch {}
+  sugData = {}; let sugNo = 0;
+  let saved = {}, checkedSaved = new Set();
+  try {
+    const e = await (await fetch(`/api/jobs/${st.id}/edits`)).json();
+    saved = e.lines || {}; checkedSaved = new Set((e.checked || []).map(String));
+  } catch {}
   savedEdits = saved;
   originals = Object.fromEntries(res.lines.map(l => [l.id, l.text]));
   $("saveName").value = st.filename.replace(/\.[^.]+$/, "") + ".txt";
@@ -417,9 +452,24 @@ async function renderResult(st) {
     for (const n of notesBy[ln.id] || []) cards.push(`<div class="cc note"><span class="k">Note</span><br>${esc(n.note)}</div>`);
     const handEdited = saved[ln.id] !== undefined;
     if (handEdited) text = esc(saved[ln.id]);  // the person's version; the cards still say what the machine did
-    const kind = cards.length ? (res.mode === "corrected" ? "" : " flag") : " none";
+    const machineCards = cards.length;
+    for (const s of sugs[ln.id] || []) {  // learned from earlier corrections; applied only on a click
+      const no = ++sugNo;
+      sugData[no] = {line: String(ln.id), heard: s.heard, replacement: s.replacement, sure: s.sure};
+      const h = esc(s.heard);
+      if (h && text.includes(h)) text = text.replace(h, `<mark class="sug">${h}<sup>L${no}</sup></mark>`);
+      const times = `${s.count} transcript${s.count === 1 ? "" : "s"}`;
+      cards.push(`<div class="cc sug" data-sug="${no}"><span class="cn sug">L${no}</span> <span class="k">Learned fix${s.sure ? "" : ", check it"}</span><br>
+        <span class="ar">${h}</span> → <span class="ar">${esc(s.replacement)}</span><br>
+        <b>Where from:</b> you made this fix in ${times}${s.kept ? `; kept it as heard ${s.kept} time${s.kept === 1 ? "" : "s"}` : ""}.
+        ${s.same_context ? "Same word before it as last time." : "<b>Different word before it</b>, so it may be right as heard."}<br>
+        <button class="apply" data-sug="${no}">Apply</button></div>`);
+    }
+    const kind = !cards.length ? " none" : machineCards ? (res.mode === "corrected" ? "" : " flag") : " sug";
+    const isChecked = handEdited || checkedSaved.has(String(ln.id));
     html.push(`<div class="say${handEdited ? " edited" : ""}" data-id="${ln.id}"><button class="play" data-s="${ln.start}" data-e="${ln.end}"
-        aria-label="Play this line from ${clock(ln.start)}">▶ ${clock(ln.start)}</button><span class="txt" contenteditable="${EDIT_MODE}"
+        aria-label="Play this line from ${clock(ln.start)}">▶ ${clock(ln.start)}</button><button class="chk" aria-pressed="${isChecked}"
+        title="Checked: I listened and the text is right (used as training data)">✓</button><span class="txt" contenteditable="${EDIT_MODE}"
         spellcheck="false" lang="ar" role="textbox" aria-label="Line at ${clock(ln.start)}, editable">${text}</span></div>
       <div class="cline${kind}"></div><div class="cards">${cards.join("")}</div>`);
   }
@@ -428,10 +478,20 @@ async function renderResult(st) {
     player.currentTime = +b.dataset.s; player.play(); stopAt = +b.dataset.e;
     document.querySelectorAll(".say.playing").forEach(x => x.classList.remove("playing")); b.parentElement.classList.add("playing");
   }));
+  document.querySelectorAll("#tr .chk").forEach(b => b.addEventListener("click", () => {
+    b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true");
+    setDirty(true);
+  }));
+  document.querySelectorAll("#tr .apply").forEach(b => b.addEventListener("click", () => {
+    if (!applySug(+b.dataset.sug)) b.textContent = "Already changed";
+    updateApplyAll();
+  }));
+  updateApplyAll();
   document.querySelectorAll("#tr .txt").forEach(t => {
     t.addEventListener("input", () => {
       const say = t.parentElement, id = say.dataset.id;
       say.classList.toggle("edited", lineText(t) !== squash(originals[id]));
+      say.querySelector(".chk").setAttribute("aria-pressed", "true");  // a corrected line is a checked line
       setDirty(true);
     });
     t.addEventListener("keydown", (e) => {  // Enter moves to the next line instead of breaking this one
@@ -494,13 +554,16 @@ $("saveBtn").addEventListener("click", async () => {
     catch (e) { cancelled = e.name === "AbortError"; }
   }
   try {
-    const lines = {};
-    document.querySelectorAll("#tr .say").forEach(s => lines[s.dataset.id] = lineText(s.querySelector(".txt")));
-    const r = await fetch(`/api/jobs/${currentJob}/edits`, {method: "POST", body: JSON.stringify({lines}),
+    const lines = {}, checked = [];
+    document.querySelectorAll("#tr .say").forEach(s => {
+      lines[s.dataset.id] = lineText(s.querySelector(".txt"));
+      if (s.querySelector(".chk").getAttribute("aria-pressed") === "true") checked.push(s.dataset.id);
+    });
+    const r = await fetch(`/api/jobs/${currentJob}/edits`, {method: "POST", body: JSON.stringify({lines, checked}),
       headers: {"X-Transcriber": "1", "Content-Type": "application/json"}});
     const out = await r.json();
     if (!r.ok) throw new Error(out.error || r.statusText);
-    const fixes = `${out.edited} line${out.edited === 1 ? "" : "s"} corrected by hand`;
+    const fixes = `${out.edited} line${out.edited === 1 ? "" : "s"} corrected by hand, ${out.checked} checked`;
     const blob = new Blob([out.text], {type: "text/plain;charset=utf-8"});
     let where;
     if (handle) {
@@ -515,6 +578,7 @@ $("saveBtn").addEventListener("click", async () => {
     }
     setDirty(false, `${where} ${fixes}; the .txt and .srt downloads above include them.`);
     savedEdits = Object.fromEntries(Object.entries(lines).filter(([id, t]) => t !== squash(originals[id])));
+    loadLearned();  // saving teaches the app: refresh the learned fixes
   } catch (err) {
     $("saveMsg").textContent = "Couldn't save: " + err.message; $("saveMsg").className = "msg bad";
   }
@@ -546,7 +610,83 @@ async function loadHistory() {
   $("hist").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { openJob(b.dataset.id); window.scrollTo({top: 0, behavior: "smooth"}); }));
 }
 
-loadStatus(); loadHistory();
+// ---------- learned fixes ----------
+let sugData = {};
+function applySug(no) {
+  const s = sugData[no];
+  if (!s || s.applied) return false;
+  const say = document.querySelector(`#tr .say[data-id="${s.line}"]`), t = say?.querySelector(".txt");
+  if (!t) return false;
+  const cur = lineText(t);
+  if (!cur.includes(s.heard)) return false;
+  t.textContent = cur.replace(s.heard, s.replacement);
+  s.applied = true;
+  say.classList.toggle("edited", lineText(t) !== squash(originals[s.line]));
+  const card = document.querySelector(`.cc.sug[data-sug="${no}"]`);
+  if (card) { card.classList.add("done"); const b = card.querySelector(".apply"); if (b) b.outerHTML = '<span class="k">Applied</span>'; }
+  setDirty(true);
+  return true;
+}
+function updateApplyAll() {
+  const sure = Object.entries(sugData).filter(([, s]) => s.sure && !s.applied);
+  $("applyAll").hidden = !sure.length;
+  $("applyAll").textContent = `Apply ${sure.length} sure learned fix${sure.length === 1 ? "" : "es"}`;
+}
+$("applyAll").addEventListener("click", () => {
+  let n = 0;
+  for (const [no, s] of Object.entries(sugData)) if (s.sure && !s.applied && applySug(+no)) n++;
+  updateApplyAll();
+  setDirty(true, `Applied ${n} learned fix${n === 1 ? "" : "es"}. Listen and check them, then save.`);
+});
+
+$("checkAll").addEventListener("click", () => {
+  document.querySelectorAll("#tr .chk").forEach(b => b.setAttribute("aria-pressed", "true"));
+  setDirty(true, "All lines marked as checked. Save to keep it.");
+});
+
+async function loadLearned() {
+  try {
+    const t = await (await fetch("/api/training/stats")).json();
+    const mins = t.seconds < 60 ? null : Math.round(t.seconds / 60);
+    $("trainingInfo").textContent = t.lines
+      ? `Training data: ${t.lines} checked line${t.lines === 1 ? "" : "s"} (${t.corrected} corrected by hand) from ${t.transcripts} transcript${t.transcripts === 1 ? "" : "s"}, about ${mins === null ? Math.round(t.seconds) + " s" : mins < 60 ? mins + " min" : (t.seconds / 3600).toFixed(1) + " h"} of audio. Fine-tuning Whisper becomes worthwhile at roughly 20–50 hours.`
+      : "Training data: none yet. Lines you correct or mark ✓ checked are collected here for fine-tuning Whisper later.";
+    $("trainingExport").hidden = !t.lines;
+  } catch {}
+  let data;
+  try { data = await (await fetch("/api/learned")).json(); } catch { return; }
+  const fx = data.fixes || [];
+  $("learnedInfo").textContent = fx.length
+    ? `${fx.length} fix${fx.length === 1 ? "" : "es"} learned from your saved corrections. New transcripts suggest them, and Whisper gets ${data.prompt_terms.length} corrected word${data.prompt_terms.length === 1 ? "" : "s"} as a hint.`
+    : "Learned from the corrections you save. Used as suggestions in new transcripts and as hints for Whisper.";
+  if (!fx.length) { $("learned").innerHTML = '<span class="empty">Nothing learned yet. Correct a transcript and save it.</span>'; return; }
+  $("learned").innerHTML = `<table class="learned"><thead><tr><th>Heard</th><th>Corrected to</th><th>Made in</th><th class="ctx">Word before</th><th></th></tr></thead><tbody>${
+    fx.map(f => `<tr><td class="ar">${esc(f.heard)}</td><td class="ar">${esc(f.wrote)}</td>
+      <td>${f.count} transcript${f.count === 1 ? "" : "s"}${f.kept ? `<br><span class="hint">kept ${f.kept}×</span>` : ""}${f.imported ? `<br><span class="hint">${f.imported} imported</span>` : ""}</td>
+      <td class="ctx ar">${f.heard.includes(" ") ? "—" : esc(f.contexts.join("، ")) || "—"}</td>
+      <td><button data-key="${esc(f.key)}" title="Stop suggesting this fix">Remove</button></td></tr>`).join("")
+  }</tbody></table>`;
+  $("learned").querySelectorAll("button[data-key]").forEach(b => b.addEventListener("click", async () => {
+    if (!confirm("Stop suggesting this fix?")) return;
+    await fetch("/api/learned/remove?" + new URLSearchParams({key: b.dataset.key}), {method: "POST", headers: {"X-Transcriber": "1"}});
+    loadLearned();
+  }));
+}
+$("importBtn").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const r = await fetch("/api/learned/import", {method: "POST", body: await f.text(),
+      headers: {"X-Transcriber": "1", "Content-Type": "application/json"}});
+    const out = await r.json();
+    if (!r.ok) throw new Error(out.error || r.statusText);
+    alert(`Imported ${out.imported} learned fix${out.imported === 1 ? "" : "es"}.`);
+    loadLearned();
+  } catch (err) { alert("Couldn't import: " + err.message); }
+  e.target.value = "";
+});
+
+loadStatus(); loadHistory(); loadLearned();
 setInterval(loadStatus, 15000);
 if (location.hash.length > 1) openJob(location.hash.slice(1));
 </script>

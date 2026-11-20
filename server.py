@@ -17,7 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from pipeline import config, engines, model_download, outputs
+from pipeline import config, engines, learning, model_download, outputs, training
 from pipeline.job import create_job, queue_redo, saved_runs
 
 APP_VERSION = "0.3.0"
@@ -133,6 +133,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
+    def _send_file(self, path: Path, ctype: str, filename: str) -> None:
+        """Stream a (possibly large) file in chunks as a download."""
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(path.stat().st_size))
+        self.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{quote(filename, safe='')}")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        with open(path, "rb") as f:
+            while chunk := f.read(1 << 20):
+                self.wfile.write(chunk)
+
     def _json(self, data, code: int = 200) -> None:
         self._send(code, json.dumps(data, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
@@ -162,7 +174,23 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self._status())
         if path == "/api/jobs":
             return self._json(self._list_jobs())
-        m = re.match(r"^/api/jobs/([^/]+)(?:/(files/[^/]+|audio|edits))?$", path)
+        if path == "/api/learned":
+            return self._json({"fixes": learning.fixes(), "prompt_terms": learning.prompt_terms()})
+        if path == "/api/training/stats":
+            return self._json(training.stats())
+        if path == "/api/training/export":
+            exports = config.DATA / "exports"
+            exports.mkdir(parents=True, exist_ok=True)
+            for old in exports.glob("training-data-*.zip"):  # keep only the newest export on disk
+                old.unlink(missing_ok=True)
+            dest = exports / time.strftime("training-data-%Y%m%d-%H%M%S.zip")
+            training.export_zip(dest)
+            return self._send_file(dest, "application/zip", dest.name)
+        if path == "/api/learned/export":
+            body = json.dumps(learning.export_data(), ensure_ascii=False, indent=1).encode("utf-8")
+            return self._send(200, body, "application/json; charset=utf-8",
+                              {"Content-Disposition": "attachment; filename=learned-fixes.json"})
+        m = re.match(r"^/api/jobs/([^/]+)(?:/(files/[^/]+|audio|edits|suggestions))?$", path)
         if not m:
             return self._error(404, "Not found")
         d = self._job_dir(m.group(1))
@@ -174,6 +202,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._audio(d / "plain.wav")
         if m.group(2) == "edits":
             return self._json(_read_json(d / "edits.json") or {"lines": {}, "saved_at": None})
+        if m.group(2) == "suggestions":
+            payload = _read_json(d / "result.json")
+            if payload is None:
+                return self._json({})
+            edits = (_read_json(d / "edits.json") or {}).get("lines", {})
+            return self._json(learning.suggest(outputs.apply_edits(payload["result"], edits)["lines"]))
         name = unquote(m.group(2)[len("files/"):])
         if name not in DOWNLOADS or not (d / name).exists():
             return self._error(404, "File not ready")
@@ -191,6 +225,22 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("X-Transcriber") != "1":
             return self._error(403, "Missing X-Transcriber header")
         path = urlparse(self.path).path
+        if path == "/api/learned/remove":
+            key = parse_qs(urlparse(self.path).query).get("key", [""])[0]
+            if not key:
+                return self._error(400, "Which fix?")
+            learning.block(key)
+            return self._json({"ok": True})
+        if path == "/api/learned/import":
+            length = int(self.headers.get("Content-Length") or 0)
+            if not 0 < length <= 10 * 1024 * 1024:
+                return self._error(400, "Empty or too large")
+            try:
+                data = json.loads(self.rfile.read(length).decode("utf-8"))
+                assert isinstance(data, dict) and isinstance(data.get("fixes"), list)
+            except (ValueError, AssertionError, UnicodeDecodeError):
+                return self._error(400, "That isn't a learned-fixes file exported from this app.")
+            return self._json({"ok": True, "imported": learning.import_data(data)})
         if path == "/api/quit":
             self._json({"ok": True})
             threading.Timer(0.3, lambda: HTTPD and HTTPD.shutdown()).start()
@@ -229,10 +279,11 @@ class Handler(BaseHTTPRequestHandler):
         if not 0 < length <= 5 * 1024 * 1024:
             return self._error(400, "Nothing to save")
         try:
-            sent = json.loads(self.rfile.read(length).decode("utf-8"))["lines"]
-            assert isinstance(sent, dict)
+            body = json.loads(self.rfile.read(length).decode("utf-8"))
+            sent, checked_in = body["lines"], body.get("checked", [])
+            assert isinstance(sent, dict) and isinstance(checked_in, list)
         except (ValueError, KeyError, AssertionError, UnicodeDecodeError):
-            return self._error(400, "Expected {\"lines\": {\"<line id>\": \"text\"}}")
+            return self._error(400, "Expected {\"lines\": {\"<line id>\": \"text\"}, \"checked\": [ids]}")
         result = payload["result"]
         original = {str(ln["id"]): ln["text"] for ln in result["lines"]}
         edits = {}
@@ -241,7 +292,9 @@ class Handler(BaseHTTPRequestHandler):
                 text = " ".join(text.split())[:20000]
                 if text != " ".join(original[line_id].split()):
                     edits[line_id] = text
-        (d / "edits.json").write_text(json.dumps({"lines": edits, "saved_at": time.time()},
+        # Lines the person vouched for: marked checked, or corrected by hand. These become training data.
+        checked = sorted({str(x) for x in checked_in if str(x) in original} | set(edits), key=int)
+        (d / "edits.json").write_text(json.dumps({"lines": edits, "checked": checked, "saved_at": time.time()},
                                                  ensure_ascii=False, indent=1), encoding="utf-8")
         edited = outputs.apply_edits(result, edits)
         st = read_state(d)
@@ -250,7 +303,8 @@ class Handler(BaseHTTPRequestHandler):
             how += f" {len(edits)} line{'s' if len(edits) != 1 else ''} corrected by hand."
         outputs.write_txt(edited, Path(st["filename"]).stem, st.get("duration", 0), how, d / "transcript.txt")
         outputs.write_srt(edited, d / "transcript.srt")
-        return self._json({"ok": True, "edited": len(edits), "text": outputs.plain_text(edited)})
+        return self._json({"ok": True, "edited": len(edits), "checked": len(checked),
+                           "text": outputs.plain_text(edited)})
 
     def _redo(self, job_id: str) -> None:
         """Run steps 4-6 again with the chosen model, reusing the job's Whisper runs."""
